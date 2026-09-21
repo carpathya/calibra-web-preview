@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sorty — Demo de clasificación de envases</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <!-- Barra superior: switcher de actor + reinicio de la demo -->
+  <header class="barra-superior">
+    <div class="marca">
+      <span class="marca-nombre">Sorty</span>
+      <span class="marca-sub">Demo funcional · Clasificación de envases Backus</span>
+    </div>
+    <div class="conmutador" role="group" aria-label="Cambiar de vista en la demo">
+      <button id="btn-vista-trabajador" type="button" onclick="cambiarVista('trabajador')">Vista Trabajador</button>
+      <button id="btn-vista-conductor" type="button" onclick="cambiarVista('conductor')">Vista Conductor</button>
+      <button id="btn-vista-admin" type="button" onclick="cambiarVista('admin')">Vista Administrador</button>
+    </div>
+    <button class="btn btn-reiniciar" type="button" onclick="reiniciarDemo()">Reiniciar demo</button>
+  </header>
+
+  <main>
+    <!-- Vista Trabajador: la app móvil se muestra dentro de un frame de celular -->
+    <section id="vista-trabajador" class="vista">
+      <div class="marco-telefono">
+        <div class="telefono">
+          <div class="telefono-oreja"></div>
+          <div id="pantalla-trabajador" class="telefono-pantalla"></div>
+        </div>
+        <p class="marco-nota">App del trabajador (clasificador / muestreador)</p>
+      </div>
+    </section>
+
+    <!-- Vista Conductor (montacargas): otra app móvil, otro frame de celular -->
+    <section id="vista-conductor" class="vista">
+      <div class="marco-telefono">
+        <div class="telefono">
+          <div class="telefono-oreja"></div>
+          <div id="pantalla-conductor" class="telefono-pantalla"></div>
+        </div>
+        <p class="marco-nota">App del conductor (montacargas): despacha pallets LISTO</p>
+      </div>
+    </section>
+
+    <!-- Vista Administrador: panel web de escritorio -->
+    <section id="vista-admin" class="vista">
+      <div class="panel-admin">
+        <nav id="pestanas-admin" class="pestanas"></nav>
+        <div id="contenido-admin" class="contenido-admin"></div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Sin módulos ni dependencias: scripts clásicos en orden, funciona con file:// -->
+  <script src="lib/panzoom.min.js"></script>
+  <script src="data.js"></script>
+  <script src="state.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
