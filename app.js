@@ -939,19 +939,19 @@ function abrirAsignacion(id) {
   irA('muestreo-detalle');
 }
 
-/* Detalle de asignación: por pallet el MUESTREADOR declara el tipo de caja
- * (12/24) y el total de cajas (prefill 84/80 según tipo; editable si el pallet
- * es puchito o el tipo no cuadra con su total). botellas_revisadas = total ×
- * tipo; input limitado; % en vivo; alerta ≥ 0.40%. */
+/* Detalle de asignación: por pallet el MUESTREADOR confirma el tipo de caja
+ * (12/24, prefill del declarado por el admin) y registra las botellas MBFU.
+ * El total ya vive en el pallet (declarado al abastecer); no se ingresa.
+ * botellas_revisadas = total declarado × tipo confirmado; % en vivo; alerta ≥ 0.40%. */
 function pMuestreoDetalle() {
   const a = getAsignacion(UI.asignacionVer);
   if (!a) { irA('muestrear'); return ''; }
   let h = '<div class="appbar"><button class="appbar-atras" onclick="irA(\'muestrear\')">‹</button>' +
     '<span class="appbar-titulo">' + a.id + '</span></div>';
-  h += '<p class="mini muted" style="margin:0 0 10px">Declara el <strong>tipo de caja</strong> de cada pallet y revisa ' +
-    'completo. Si es <strong>puchito</strong>, corrige el total de cajas con el valor real. ' +
-    'botellas revisadas = total de cajas × botellas del tipo. Registra también <strong>en cuántas cajas</strong> ' +
-    'aparecieron esas botellas malas (dato para reportes). MBFU% ≥ ' +
+  h += '<p class="mini muted" style="margin:0 0 10px">Confirma el <strong>tipo de caja</strong> de cada pallet ' +
+    '(prefill del admin) y registra las <strong>botellas MBFU</strong> encontradas. ' +
+    'Botellas revisadas = <strong>total declarado</strong> × tipo confirmado. Registra también ' +
+    '<strong>en cuántas cajas</strong> aparecieron esas botellas malas (dato para reportes). MBFU% ≥ ' +
     REGLAS.UMBRAL_MBFU.toFixed(2) + '% → <strong>alerta</strong> para decisión del admin.</p>';
 
   a.palletIds.forEach(pid => {
@@ -959,10 +959,9 @@ function pMuestreoDetalle() {
     if (!p) return;
     h += '<div class="tarjeta-movil"><h3>' + pid + '</h3>' +
       '<p class="mini muted">' + ubicacionPallet(p) + ' · clasificado por ' + esc(nombreTrabajador(p.clasificadoPor)) +
-      ' · declaró ' + p.cajasTotales + ' cajas</p>';
+      ' · declaró ' + p.cajasTotales + ' cajas' + ((p.tipoCaja === 12 || p.tipoCaja === 24) ? ' (caja ' + p.tipoCaja + ')' : '') + '</p>';
     if (p.estado === 'CLASIFICADO') {
       const tipoIni = muestreoTipoInicial(p);
-      const totalIni = muestreoTotalInicial(p, tipoIni);
       h += '<div class="campo" style="margin-top:6px"><label>Tipo de caja</label>' +
         '<div class="chips-total">' +
         '<button class="chip-total' + (tipoIni === 12 ? ' activo' : '') + '" id="chip-t12-' + pid +
@@ -970,15 +969,12 @@ function pMuestreoDetalle() {
         '<button class="chip-total' + (tipoIni === 24 ? ' activo' : '') + '" id="chip-t24-' + pid +
         '" onclick="cambiarTipoMuestreo(\'' + pid + '\',24)">Caja 24</button>' +
         '</div></div>' +
-        '<div class="campo"><label>Total de cajas del pallet</label>' +
-        '<input type="number" id="mtotal-' + pid + '" min="1" max="' + REGLAS.MAX_CAJAS_PALLET +
-        '" value="' + totalIni + '" onchange="actualizarPct(\'' + pid + '\')"></div>' +
         '<div class="campo"><label>Botellas MBFU encontradas</label>' +
         '<input type="number" id="mbfu-' + pid + '" min="0" value="0" oninput="actualizarPct(\'' + pid + '\')"></div>' +
         '<div class="campo"><label>Cajas donde se encontraron esas botellas</label>' +
         '<input type="number" id="mcajas-' + pid + '" min="0" value="0" oninput="actualizarPct(\'' + pid + '\')">' +
         '<p class="mini muted" style="margin:4px 0 0">Cuántas cajas distintas traían botellas malas (ej.: 8 botellas en 3 cajas). Es el dato para concientizar en reportes.</p></div>' +
-        '<p class="mini">Revisadas: <strong id="rev-' + pid + '">' + fmtMiles(totalIni * tipoIni) + '</strong> botellas · ' +
+        '<p class="mini">Revisadas: <strong id="rev-' + pid + '">' + fmtMiles(p.cajasTotales * tipoIni) + '</strong> botellas · ' +
         'MBFU%: <strong id="pct-' + pid + '" class="cifra-ok">0.00%</strong> ' +
         '· cajas: <strong id="cajas-aviso-' + pid + '">0</strong> ' +
         '<span id="alerta-' + pid + '" style="display:none">' + chipAlerta() + '</span></p>' +
@@ -995,42 +991,26 @@ function pMuestreoDetalle() {
   return h;
 }
 
-/* Tipo/total inicial del muestreo: prefill por el tipo declarado del pallet
+/* Tipo inicial del muestreo: prefill por el tipo declarado del pallet
  * (12/24) y, si falta, por el total declarado al clasificar */
 function muestreoTipoInicial(pallet) {
   if (pallet.tipoCaja === 12 || pallet.tipoCaja === 24) return pallet.tipoCaja;
   return inferirBotellasPorCaja(pallet.cajasTotales); // ≤80 → 24 (incluye puchito), >80 → 12
 }
-function muestreoTotalInicial(pallet, tipo) {
-  // Si el total declarado "cuadra" con el tipo elegido, va prellenado (readonly);
-  // si es puchito (≠84/80) o no cuadra con el tipo, el muestreador ingresa el real.
-  if (pallet.cajasTotales === REGLAS.CAJAS_PALLET_CAJA12 && tipo === 12) return REGLAS.CAJAS_PALLET_CAJA12;
-  if (pallet.cajasTotales === REGLAS.CAJAS_PALLET_CAJA24 && tipo === 24) return REGLAS.CAJAS_PALLET_CAJA24;
-  return pallet.cajasTotales;
-}
-function muestreoEsEditable(pallet, tipo) {
-  return muestreoTotalInicial(pallet, tipo) !== (tipo === 12 ? REGLAS.CAJAS_PALLET_CAJA12 : REGLAS.CAJAS_PALLET_CAJA24);
-}
 function muestreoRevisadasDe(pid) {
-  const totalEl = document.getElementById('mtotal-' + pid);
+  const p = getPallet(pid);
   const t12 = document.getElementById('chip-t12-' + pid);
   const tipo = (t12 && (t12.className || '').indexOf('activo') !== -1) ? 12 : 24;
-  const total = Math.max(1, parseInt(totalEl && totalEl.value, 10) || 0);
+  const total = p ? Math.max(1, p.cajasTotales) : 0;
   return { tipo: tipo, total: total, revisadas: total * tipo };
 }
 
-/* Cambio de tipo de caja: actualiza prefill/readonly del total y el % en vivo */
+/* Cambio de tipo de caja: solo alterna los chips y actualiza el % en vivo */
 function cambiarTipoMuestreo(pid, tipo) {
-  const p = getPallet(pid);
-  if (!p) return;
   const el12 = document.getElementById('chip-t12-' + pid);
   const el24 = document.getElementById('chip-t24-' + pid);
   if (el12 && el12.classList) el12.classList.toggle('activo', tipo === 12);
   if (el24 && el24.classList) el24.classList.toggle('activo', tipo === 24);
-  const totalEl = document.getElementById('mtotal-' + pid);
-  if (totalEl) {
-    totalEl.value = muestreoTotalInicial(p, tipo);
-  }
   actualizarPct(pid);
 }
 
