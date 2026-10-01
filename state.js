@@ -102,6 +102,9 @@ function completoCajasDe(tipo) {
 /* Resuelve el tipo de caja declarado (12/24) o lo deriva de 84/80; valida que
  * el total no supere el pallet completo del tipo. Devuelve { tipo } o { error }. */
 function resolverTipoCaja(total, tipoCaja) {
+  if (!(total >= 1)) {
+    return { error: 'El total de cajas debe ser al menos 1.' };
+  }
   let tipo = parseInt(tipoCaja, 10);
   if (tipo !== 12 && tipo !== 24) {
     if (total === REGLAS.CAJAS_PALLET_CAJA12) tipo = 12;
@@ -491,7 +494,7 @@ function definirTotalCajas(trabajadorId, palletId, n) {
 function abastecerPosiciones(posicionIds, cajasTotales, tipoCaja) {
   let n = parseInt(cajasTotales, 10);
   if (isNaN(n)) n = REGLAS.CAJAS_PALLET_CAJA12; // por defecto pallet completo caja 12
-  if (n < 1 || n > REGLAS.MAX_CAJAS_PALLET) {
+  if (n > REGLAS.MAX_CAJAS_PALLET) {
     return { error: 'El total debe ser un número entre 1 y ' + REGLAS.MAX_CAJAS_PALLET + ' cajas.' };
   }
   const res = resolverTipoCaja(n, tipoCaja); // resuelto UNA vez para todas
@@ -526,7 +529,7 @@ function abastecerPosiciones(posicionIds, cajasTotales, tipoCaja) {
  * dadas. Los tomados/clasificados no se tocan. */
 function cambiarTotalPosiciones(posicionIds, cajasTotales, tipoCaja) {
   const n = parseInt(cajasTotales, 10);
-  if (isNaN(n) || n < 1 || n > REGLAS.MAX_CAJAS_PALLET) {
+  if (isNaN(n) || n > REGLAS.MAX_CAJAS_PALLET) {
     return { error: 'El total debe ser un número entre 1 y ' + REGLAS.MAX_CAJAS_PALLET + '.' };
   }
   const res = resolverTipoCaja(n, tipoCaja); // resuelto UNA vez para todos
@@ -633,7 +636,7 @@ function abastecerPendientesBahia(bahiaId, cajasTotales, tipoCaja) {
   if (!bahia) return { error: 'Bahía no válida.' };
   let n = parseInt(cajasTotales, 10);
   if (isNaN(n)) n = REGLAS.CAJAS_PALLET_CAJA12;
-  if (n < 1 || n > REGLAS.MAX_CAJAS_PALLET) {
+  if (n > REGLAS.MAX_CAJAS_PALLET) {
     return { error: 'El total debe ser un número entre 1 y ' + REGLAS.MAX_CAJAS_PALLET + ' cajas.' };
   }
   const res = resolverTipoCaja(n, tipoCaja); // resuelto UNA vez para todas

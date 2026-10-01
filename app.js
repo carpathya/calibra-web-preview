@@ -1611,7 +1611,10 @@ function renderAdmin() {
   }
   // El pan/zoom del mapa se (re)inicializa tras cada render de ese tab y se
   // destruye al salir de él (el zoom se resetea al cambiar de tab: aceptable).
-  if (UI.tab === 'mapa' || UI.tab === 'despacho') inicializarMapaPanzoom(); else destruirMapaPanzoom();
+  // En el tab de muestreo el modo manual monta su propio mapa y su pan/zoom.
+  if (UI.tab === 'mapa' || UI.tab === 'despacho') inicializarMapaPanzoom();
+  else if (UI.tab === 'muestreo' && UI.modoMuestreo === 'manual') mostrarTandaManual();
+  else destruirMapaPanzoom();
   if (UI.tab === 'despacho' && UI.zonaDespAdmin) inicializarCarruselSweep('despCarruselAdmin');
 }
 
@@ -1752,11 +1755,7 @@ function panelLateralAdmin() {
       '</div>' +
       '<div class="fila-form" style="grid-template-columns:1fr auto;gap:8px;margin-bottom:8px">' +
       '<label class="mini muted" style="align-self:center">Total de cajas</label>' +
-      '<input type="number" id="form-celda-total" min="1" max="' + REGLAS.MAX_CAJAS_PALLET + '" value="' + REGLAS.CAJAS_PALLET_CAJA12 + '">' +
-      '</div>' +
-      '<div class="fila-botones" style="margin-bottom:8px">' +
-      '<button class="btn" onclick="setTotalCelda(' + REGLAS.CAJAS_PALLET_CAJA12 + ')">84</button>' +
-      '<button class="btn" onclick="setTotalCelda(' + REGLAS.CAJAS_PALLET_CAJA24 + ')">80</button>' +
+      '<input type="number" id="form-celda-total" min="1" max="' + REGLAS.CAJAS_PALLET_CAJA12 + '" value="' + REGLAS.CAJAS_PALLET_CAJA12 + '">' +
       '</div>' +
       '<div class="fila-botones" style="flex-direction:column">';
     if (pendientes > 0) {
@@ -1795,12 +1794,11 @@ function panelLateralAdmin() {
         '</div>';
       h += '<div class="fila-botones" style="flex-direction:column">';
       if (nPendientes > 0) {
-        h += '<div class="campo" style="margin-bottom:8px"><label>Total a abastecer</label>' +
-          '<select id="form-bahia-total">' +
-          '<option value="84">84 · caja 12</option>' +
-          '<option value="80">80 · caja 24</option>' +
-          '</select>' +
-          '</div>' +
+        h += '<div class="campo" style="margin-bottom:8px"><label>Tipo de caja</label>' +
+          '<div class="chips-total">' +
+          '<button class="chip-total activo" id="chip-bahia-12" onclick="setTipoBahia(12)">Caja 12</button>' +
+          '<button class="chip-total" id="chip-bahia-24" onclick="setTipoBahia(24)">Caja 24</button>' +
+          '</div></div>' +
           '<button class="btn btn-primario" onclick="abastecerBahiaUI(\'' + b.id + '\')">Abastecer bahía</button>';
       }
       if (nInactivas > 0) {
@@ -1949,19 +1947,19 @@ function setTipoCelda(tipo) {
   const el24 = document.getElementById('chip-celda-24');
   if (el12) el12.classList.toggle('activo', tipo === 12);
   if (el24) el24.classList.toggle('activo', tipo === 24);
+  // El tipo manda: el total arranca en el pallet completo de ese tipo y no lo
+  // puede superar (caja 12 ≤ 84, caja 24 ≤ 80).
+  const total = document.getElementById('form-celda-total');
+  if (total) {
+    const completo = completoCajasDe(tipo);
+    total.max = completo;
+    total.value = completo;
+  }
 }
 /* Lee el tipo de caja marcado en los chips (default 12 si ninguno está activo). */
 function tipoCeldaActual() {
   const el24 = document.getElementById('chip-celda-24');
   return (el24 && el24.classList.contains('activo')) ? 24 : 12;
-}
-/* Atajo rápido del input de total de la celda seleccionada (84 / 80):
- * además de fijar el total, setea el tipo implícito (84→caja 12, 80→caja 24). */
-function setTotalCelda(valor) {
-  const el = document.getElementById('form-celda-total');
-  if (el) el.value = valor;
-  if (valor === REGLAS.CAJAS_PALLET_CAJA12) setTipoCelda(12);
-  else if (valor === REGLAS.CAJAS_PALLET_CAJA24) setTipoCelda(24);
 }
 /* Ids de las celdas actualmente marcadas en el mapa admin. */
 function celdasSeleccionadas() {
@@ -2023,23 +2021,32 @@ function vaciarBahiaUI(bahiaId) {
   if (res.error) alert(res.error);
 }
 
-/* Lee el selector de total de la bahía (84/80) y delega en el abastecimiento
- * en bloque de pendientes (default 84). */
+/* Chips "Tipo de caja" del panel de bahía: el total es el pallet completo del tipo. */
+function setTipoBahia(tipo) {
+  const el12 = document.getElementById('chip-bahia-12');
+  const el24 = document.getElementById('chip-bahia-24');
+  if (el12) el12.classList.toggle('activo', tipo === 12);
+  if (el24) el24.classList.toggle('activo', tipo === 24);
+}
+function tipoBahiaActual() {
+  const el24 = document.getElementById('chip-bahia-24');
+  return (el24 && el24.classList.contains('activo')) ? 24 : 12;
+}
+/* Abastece la bahía con el pallet completo del tipo elegido (caja 12 → 84 · caja 24 → 80). */
 function abastecerBahiaUI(bahiaId) {
-  const sel = document.getElementById('form-bahia-total');
-  const valor = sel ? sel.value : '84';
-  abastecerPendientesBahiaUI(bahiaId, valor);
+  const tipo = tipoBahiaActual();
+  abastecerPendientesBahiaUI(bahiaId, completoCajasDe(tipo), tipo);
 }
 
 /* Abastece TODAS las posiciones pendientes (sin pallet) de una bahía con el
  * total elegido; las inactivas se activan en silencio. Confirm corto: N + total. */
-function abastecerPendientesBahiaUI(bahiaId, cajasTotales) {
+function abastecerPendientesBahiaUI(bahiaId, cajasTotales, tipoCaja) {
   const b = getBahia(bahiaId);
   const n = posicionesDeBahia(bahiaId).filter(p => !p.palletId).length;
   const total = parseInt(cajasTotales, 10);
   const rotulo = total === 84 ? '84 (caja 12)' : (total === 80 ? '80 (caja 24)' : total + ' (puchito)');
   if (!confirm('Abastecer las ' + n + ' posiciones pendientes de ' + (b ? etiquetaBahia(b) : bahiaId) + ' con ' + rotulo + '?\nNo se tocan las posiciones que ya tienen pallet.')) return;
-  const res = abastecerPendientesBahia(bahiaId, cajasTotales);
+  const res = abastecerPendientesBahia(bahiaId, cajasTotales, tipoCaja);
   if (res.error) alert(res.error);
   else alert(res.cantidad + ' pallets abastecidos (' + rotulo + ').');
 }
@@ -2388,7 +2395,7 @@ function aAsignarMuestreo() {
     '<option value="">Elegir…</option>' +
     trabajadoresActivos().map(t => '<option value="' + t.id + '">' + esc(t.nombre) + '</option>').join('') +
     '</select></div>' +
-    '<div class="campo"><label>Clasificador a auditar</label><select id="form-clasificador" onchange="actualizarDisponibles();mostrarAlcance();mostrarTandaManual()">' +
+    '<div class="campo"><label>Clasificador a auditar</label><select id="form-clasificador" onchange="actualizarDisponibles();mostrarTandaManual()">' +
     '<option value="">Elegir…</option>' +
     trabajadoresActivos().map(t => '<option value="' + t.id + '">' + esc(t.nombre) + '</option>').join('') +
     '</select></div>' +
@@ -2397,14 +2404,10 @@ function aAsignarMuestreo() {
     '<button class="btn" style="margin-top:6px" onclick="sortearCantidad()">Al azar</button></div>' +
     '<button class="btn btn-primario" onclick="crearAsignacionDesdeForm()">Crear asignación</button>' +
     '</div>' +
-    '<div class="campo" id="campo-tanda"' + (manual ? '' : ' style="display:none"') + '><label>Tanda manual (marca los pallets CLASIFICADOS del lote)</label>' +
-    '<div id="form-tanda"><p class="mini muted">Elige un clasificador para elegir la tanda manual.</p></div></div>' +
-    // LOTE CONGELADO: alcance propuesto (todo lo clasificado pendiente), ajustable
-    '<div class="campo" style="margin-top:10px"><label>Alcance propuesto del lote (se congela al crear)</label>' +
-    '<div id="form-alcance"><p class="mini muted">Elige un clasificador para ver su alcance propuesto.</p></div></div>' +
-    '<p class="mini muted">El sistema PROPONE como alcance todo lo clasificado-pendiente del clasificador (su jornada); ' +
-    'puedes quitar pallets del alcance. La tanda sale del lote: aleatoria (2–3) o manual (cantidad libre, mín. 1); ' +
-    'la asignación aparece de inmediato en la app del muestreador.</p>';
+    '<div class="campo" id="campo-tanda"' + (manual ? '' : ' style="display:none"') + '><label>Tanda manual (marca los pallets CLASIFICADOS en el mapa)</label>' +
+    '<div id="form-tanda"><p class="mini muted">Elige un clasificador para elegir la tanda manual en el mapa.</p></div></div>' +
+    '<p class="mini muted">El lote es siempre el último conjunto del clasificador (automático, no se ajusta). La tanda sale del lote: ' +
+    'aleatoria (2–3) o manual (en el mapa, mín. 1); la asignación aparece de inmediato en la app del muestreador.</p>';
   if (UI.msg) {
     h += '<div class="mensaje ' + (UI.msg.tipo === 'ok' ? 'mensaje-ok' : 'mensaje-error') + '">' + esc(UI.msg.texto) + '</div>';
   }
@@ -2440,7 +2443,7 @@ function actualizarDisponibles() {
 }
 
 /* Selector de modo de tanda: alterna la visibilidad cantidad (aleatorio) vs
- * lista manual (manual) sin re-render (conserva el resto del form). */
+ * mapa manual (manual) sin re-render (conserva el resto del form). */
 function cambiarModoMuestreo(modo) {
   UI.modoMuestreo = modo;
   const cCant = document.getElementById('campo-cantidad');
@@ -2448,104 +2451,176 @@ function cambiarModoMuestreo(modo) {
   if (cCant) cCant.style.display = modo === 'manual' ? 'none' : '';
   if (cTanda) cTanda.style.display = modo === 'manual' ? '' : 'none';
   if (modo === 'manual') mostrarTandaManual();
+  else destruirMapaPanzoom();
 }
 
-/* Tanda manual: lista como checkboxes los pallets CLASIFICADOS del lote actual
- * (alcance ajustado o propuesto). Mantiene las selecciones aún elegibles. */
+/* Estado cache del mapa de tanda manual (por render, para no releer el DOM en
+ * cada segmento): el LOTE = último conjunto del clasificador no despachado;
+ * elegibles = sus CLASIFICADOS (los tocables). */
+let tandaPoolCache = {};      // palletId → true (pallets del lote, no DESPACHADO)
+let tandaElegiblesCache = []; // pallets CLASIFICADOS del lote
+let tandaMaxCache = 0;        // nº de CLASIFICADOS del lote (máximo del contador)
+
+/* Tanda manual: el admin marca los pallets CLASIFICADOS del lote SOBRE EL MAPA
+ * del almacén (el lote resaltado y tocable; el resto atenuado e inerte).
+ * Mantiene las selecciones previas que sigan siendo elegibles. */
 function mostrarTandaManual() {
   if (UI.modoMuestreo !== 'manual') return;
   const cont = document.getElementById('form-tanda');
   if (!cont) return;
   const cid = document.getElementById('form-clasificador').value;
+  tandaPoolCache = {};
+  tandaElegiblesCache = [];
+  tandaMaxCache = 0;
   if (!cid) {
     UI.tandaSel = {};
-    cont.innerHTML = '<p class="mini muted">Elige un clasificador para elegir la tanda manual.</p>';
+    destruirMapaPanzoom();
+    cont.innerHTML = '<p class="mini muted">Elige un clasificador para elegir la tanda manual en el mapa.</p>';
     return;
   }
-  // Lote = alcance ajustado por el Admin (UI.alcanceSel) o propuesto (último conjunto)
-  const conjuntoId = ultimoConjuntoDe(cid);
-  const pool = conjuntoId ? palletsDelConjunto(conjuntoId).filter(p => p.estado !== 'DESPACHADO') : [];
-  const alcance = UI.alcanceSel ? pool.filter(p => UI.alcanceSel[p.id]) : pool;
-  const elegibles = alcance.filter(p => p.estado === 'CLASIFICADO');
-  // Conservar solo selecciones previas que sigan siendo elegibles
-  const elegiblesSet = new Set(elegibles.map(p => p.id));
-  const prev = UI.tandaSel || {};
-  UI.tandaSel = {};
-  Object.keys(prev).forEach(k => { if (prev[k] && elegiblesSet.has(k)) UI.tandaSel[k] = true; });
-  if (!elegibles.length) {
-    cont.innerHTML = '<p class="mini">Sin pallets CLASIFICADOS en el lote actual: no hay tanda manual posible.</p>';
-    return;
-  }
-  let filas = '';
-  elegibles.forEach(p => {
-    const marcado = !!UI.tandaSel[p.id];
-    filas += '<label class="fila-alcance"><input type="checkbox" ' + (marcado ? 'checked ' : '') + 'onchange="toggleTanda(\'' + p.id + '\', this.checked)">' +
-      '<span class="mini"><strong>' + p.id + '</strong> · ' + ubicacionPallet(p) + ' · ' +
-      p.cajasTotales + ' cajas · ' + chipEstadoPallet(p.estado) + '</span></label>';
-  });
-  const n = Object.keys(UI.tandaSel).filter(k => UI.tandaSel[k]).length;
-  cont.innerHTML = '<p class="mini" id="tanda-n"><strong>' + n + '</strong> pallets seleccionados (mínimo 1, máximo ' + elegibles.length + ')</p>' + filas;
-}
-function toggleTanda(pid, checked) {
-  UI.tandaSel = UI.tandaSel || {};
-  UI.tandaSel[pid] = !!checked;
-  const n = Object.keys(UI.tandaSel).filter(k => UI.tandaSel[k]).length;
-  const cont = document.getElementById('form-tanda');
-  const max = cont ? cont.querySelectorAll('input[type="checkbox"]').length : 0;
-  const el = document.getElementById('tanda-n');
-  if (el) el.innerHTML = '<strong>' + n + '</strong> pallets seleccionados (mínimo 1, máximo ' + max + ')';
-}
-
-/* Alcance propuesto del lote: lista lo clasificado-pendiente del clasificador
- * con la opción de quitar pallets (ajuste). Actualiza el contador por DOM. */
-function mostrarAlcance() {
-  const cid = document.getElementById('form-clasificador').value;
-  const cont = document.getElementById('form-alcance');
-  UI.alcanceSel = {};
-  if (!cid) {
-    cont.innerHTML = '<p class="mini muted">Elige un clasificador para ver su alcance propuesto (su último conjunto).</p>';
-    return;
-  }
-  // Alcance propuesto = el ÚLTIMO CONJUNTO del clasificador (regla del lote)
+  // Lote = último conjunto completo del clasificador (automático, no se ajusta)
   const conjuntoId = ultimoConjuntoDe(cid);
   const pool = conjuntoId ? palletsDelConjunto(conjuntoId).filter(p => p.estado !== 'DESPACHADO') : [];
   if (!pool.length) {
+    UI.tandaSel = {};
+    destruirMapaPanzoom();
     cont.innerHTML = '<p class="mini">Sin conjunto disponible: el clasificador no tiene un último conjunto con pallets en almacén.</p>';
     return;
   }
-  let filas = '';
-  pool.forEach(p => {
-    UI.alcanceSel[p.id] = true;
-    filas += '<label class="fila-alcance"><input type="checkbox" checked onchange="toggleAlcance(\'' + p.id + '\', this.checked)">' +
-      '<span class="mini"><strong>' + p.id + '</strong> · ' + ubicacionPallet(p) + ' · ' +
-      p.cajasTotales + ' cajas · ' + chipEstadoPallet(p.estado) + '</span></label>';
-  });
-  cont.innerHTML = '<p class="mini" id="alcance-n"><strong>' + pool.length + '</strong> pallets en el alcance ' +
-    '(propuesto: su último conjunto ' + conjuntoId + '; la tanda sale de sus clasificados)</p>' + filas;
+  pool.forEach(p => { tandaPoolCache[p.id] = true; });
+  tandaElegiblesCache = pool.filter(p => p.estado === 'CLASIFICADO');
+  tandaMaxCache = tandaElegiblesCache.length;
+  // Conservar solo selecciones previas que sigan siendo elegibles
+  const elegiblesSet = new Set(tandaElegiblesCache.map(p => p.id));
+  const prev = UI.tandaSel || {};
+  UI.tandaSel = {};
+  Object.keys(prev).forEach(k => { if (prev[k] && elegiblesSet.has(k)) UI.tandaSel[k] = true; });
+  if (!tandaElegiblesCache.length) {
+    destruirMapaPanzoom();
+    cont.innerHTML = '<p class="mini">Sin pallets CLASIFICADOS en el lote actual: no hay tanda manual posible.</p>';
+    return;
+  }
+  const n = Object.keys(UI.tandaSel).filter(k => UI.tandaSel[k]).length;
+  cont.innerHTML =
+    '<p class="mini" id="tanda-n"><strong>' + n + '</strong> pallets seleccionados (mínimo 1, máximo ' + tandaMaxCache + ')</p>' +
+    '<div class="fila-botones">' +
+    '<button class="btn" onclick="seleccionarBahiaTanda()">Seleccionar bahía</button>' +
+    '<button class="btn" onclick="seleccionarTodoLoteTanda()">Seleccionar todo el lote</button>' +
+    '<button class="btn" onclick="limpiarTanda()">Limpiar</button>' +
+    '</div>' +
+    '<div class="mapa-viewport" id="mapa-viewport">' +
+    '<div class="mapa-herramientas">' +
+    '<button class="btn" title="Acercar" onclick="mapaZoomIn()">＋</button>' +
+    '<button class="btn" title="Alejar" onclick="mapaZoomOut()">−</button>' +
+    '<button class="btn btn-restablecer" title="Restablecer vista" onclick="mapaReset()">Restablecer</button>' +
+    '</div>' +
+    '<div class="mapa-ayuda">Arrastra para mover · rueda para acercar</div>' +
+    '<div class="mapa-lienzo" id="mapa-lienzo">' +
+    mapaAlmacenSketch(segPosicionTandaMuestreo) +
+    '</div></div>';
+  inicializarMapaPanzoom();
 }
-function toggleAlcance(pid, checked) {
-  UI.alcanceSel = UI.alcanceSel || {};
-  UI.alcanceSel[pid] = !!checked;
-  const n = Object.keys(UI.alcanceSel).filter(k => UI.alcanceSel[k]).length;
-  const el = document.getElementById('alcance-n');
-  if (el) el.innerHTML = '<strong>' + n + '</strong> pallets en el alcance (propuesto: su último conjunto; la tanda sale de sus clasificados)';
-  if (UI.modoMuestreo === 'manual') mostrarTandaManual();
+
+/* Pool del lote cacheado para el renderer de segmentos (evita releer el DOM). */
+function tandaPoolActual() { return tandaPoolCache; }
+
+/* Segmento del mapa de la tanda manual: el LOTE resalta sus CLASIFICADOS
+ * (tocables); el resto del almacén queda atenuado e inerte. */
+function segPosicionTandaMuestreo(pos) {
+  if (!pos) return '';
+  const p = pos.palletId ? getPallet(pos.palletId) : null;
+  if (!pos.activa) {
+    return '<div class="mapa-seg mapa-seg--inactiva-admin" title="' + pos.codigo + ' · inactiva">✕</div>';
+  }
+  if (!p) {
+    return '<div class="mapa-seg mapa-seg--inerte" title="' + pos.codigo + ' · vacía"></div>';
+  }
+  if (!tandaPoolActual()[p.id]) {
+    return '<div class="mapa-seg mapa-seg--fuera-lote" title="' + pos.codigo + ' · fuera del lote (' + p.id + ')"></div>';
+  }
+  if (p.estado === 'CLASIFICADO') {
+    const sel = !!(UI.tandaSel && UI.tandaSel[p.id]);
+    return '<div class="mapa-seg mapa-seg--clasificado-desp' + (sel ? ' mapa-seg--seleccionado' : '') +
+      '" id="tanda-seg-' + pos.id + '" title="' + pos.codigo + ' · ' + p.id + ' · CLASIFICADO (clic para marcar/desmarcar)"' +
+      ' onclick="toggleTandaMapa(\'' + pos.id + '\')">' + esc(pos.codigo) + '</div>';
+  }
+  return '<div class="mapa-seg mapa-seg--inerte" title="' + pos.codigo + ' · ' + p.id + ' · ' + ESTADO_PALLET[p.estado].label + '"></div>';
+}
+
+/* Toca un pallet CLASIFICADO del lote en el mapa: alterna la marca en el DOM
+ * (sin re-render, para conservar el pan/zoom) y refresca el contador. */
+function toggleTandaMapa(posicionId) {
+  const pos = getPosicion(posicionId);
+  if (!pos || !pos.palletId) return;
+  const p = getPallet(pos.palletId);
+  if (!p || !tandaPoolActual()[p.id] || p.estado !== 'CLASIFICADO') return;
+  UI.tandaSel = UI.tandaSel || {};
+  if (UI.tandaSel[p.id]) delete UI.tandaSel[p.id];
+  else UI.tandaSel[p.id] = true;
+  const el = document.getElementById('tanda-seg-' + pos.id);
+  if (el) el.classList.toggle('mapa-seg--seleccionado', !!UI.tandaSel[p.id]);
+  refrescarTandaN();
+}
+
+/* Refresca el contador #tanda-n (N seleccionados / máximo = CLASIFICADOS). */
+function refrescarTandaN() {
+  const el = document.getElementById('tanda-n');
+  if (!el) return;
+  UI.tandaSel = UI.tandaSel || {};
+  const n = Object.keys(UI.tandaSel).filter(k => UI.tandaSel[k]).length;
+  el.innerHTML = '<strong>' + n + '</strong> pallets seleccionados (mínimo 1, máximo ' + tandaMaxCache + ')';
+}
+
+/* Refresca las marcas de todos los segmentos tocables + el contador, sin
+ * re-render (conserva el pan/zoom). */
+function refrescarTandaMapa() {
+  tandaElegiblesCache.forEach(p => {
+    const pos = getPosicion(p.posicionId);
+    if (!pos) return;
+    const el = document.getElementById('tanda-seg-' + pos.id);
+    if (el) el.classList.toggle('mapa-seg--seleccionado', !!UI.tandaSel[p.id]);
+  });
+  refrescarTandaN();
+}
+
+/* Atajo: selecciona los CLASIFICADOS del lote en la bahía del lote (la que más
+ * CLASIFICADOS del lote tiene; un conjunto se toma de una bahía). */
+function seleccionarBahiaTanda() {
+  const porBahia = {};
+  tandaElegiblesCache.forEach(p => {
+    const pos = getPosicion(p.posicionId);
+    if (!pos) return;
+    porBahia[pos.bahiaId] = (porBahia[pos.bahiaId] || 0) + 1;
+  });
+  let bahia = null, mejor = 0;
+  Object.keys(porBahia).forEach(b => { if (porBahia[b] > mejor) { mejor = porBahia[b]; bahia = b; } });
+  UI.tandaSel = {};
+  tandaElegiblesCache.forEach(p => {
+    const pos = getPosicion(p.posicionId);
+    if (pos && pos.bahiaId === bahia) UI.tandaSel[p.id] = true;
+  });
+  refrescarTandaMapa();
+}
+
+/* Atajo: selecciona TODOS los CLASIFICADOS del lote. */
+function seleccionarTodoLoteTanda() {
+  UI.tandaSel = {};
+  tandaElegiblesCache.forEach(p => { UI.tandaSel[p.id] = true; });
+  refrescarTandaMapa();
+}
+
+/* Atajo: limpia la tanda manual. */
+function limpiarTanda() {
+  UI.tandaSel = {};
+  refrescarTandaMapa();
 }
 
 function crearAsignacionDesdeForm() {
   const m = document.getElementById('form-muestreador').value;
   const c = document.getElementById('form-clasificador').value;
   const n = document.getElementById('form-cantidad').value;
-  // Lote congelado: el alcance ajustado por el Admin (o null = propuesto por defecto)
-  let loteIds = null;
-  if (UI.alcanceSel) {
-    loteIds = Object.keys(UI.alcanceSel).filter(k => UI.alcanceSel[k]);
-    if (!loteIds.length) {
-      UI.msg = { tipo: 'error', texto: 'El alcance no puede quedar vacío: deja al menos un pallet en el lote.' };
-      render();
-      return;
-    }
-  }
+  // Lote congelado: SIEMPRE el último conjunto del clasificador (null = por defecto)
+  const loteIds = null;
   const manual = UI.modoMuestreo === 'manual';
   let tandaManual = null;
   if (manual) {
@@ -2558,7 +2633,6 @@ function crearAsignacionDesdeForm() {
   }
   const res = crearAsignacionMuestreo(m, c, n, loteIds, tandaManual);
   if (res.ok) {
-    UI.alcanceSel = null;
     UI.tandaSel = {};
     UI.msg = { tipo: 'ok', texto: res.asignacion.id + ' creada: tanda ' + (manual ? 'manual' : 'aleatoria') + ' de ' +
       res.asignacion.cantidad + ' pallets (' +
