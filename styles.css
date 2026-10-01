@@ -1,5 +1,5 @@
 /* =========================================================================
- * Sorty — Demo funcional · estilos a mano (sin frameworks)
+ * Calibra — Demo funcional · estilos a mano (sin frameworks)
  * Colores por estado consistentes:
  *   gris = pendiente · azul = en proceso · verde = completo/ok
  *   naranja = alerta MBFU · rojo = rechazado · violeta = en muestreo
@@ -49,6 +49,11 @@ body {
 .marca { display: flex; align-items: baseline; gap: 10px; margin-right: auto; }
 .marca-nombre { font-size: 22px; font-weight: 800; letter-spacing: .5px; }
 .marca-sub { font-size: 12px; color: #94a3b8; }
+
+/* Marca en la pantalla de login: "Calibra" + firma "by Carpathya" */
+.login-marca { text-align: center; margin: 18px 0 6px; }
+.login-nombre { font-size: 34px; font-weight: 800; letter-spacing: .5px; }
+.login-firma { font-size: 13px; color: var(--muted); margin-top: 2px; }
 
 .conmutador { display: flex; background: #1e293b; border-radius: 999px; padding: 3px; }
 .conmutador button {
@@ -141,6 +146,8 @@ body {
   border: 2px solid #475569; border-radius: 20px; padding: 10px 10px 12px;
   margin-bottom: 12px; background: #ffffff; box-shadow: 2px 3px 0 rgba(51, 65, 85, .18);
 }
+.mapa-zona--clickeable { cursor: pointer; }
+.mapa-zona--clickeable:hover { outline: 2px solid var(--proceso); outline-offset: 1px; }
 .mapa-zona-etiqueta {
   display: inline-block; font-size: 12px; font-weight: 700; letter-spacing: 1px;
   color: #334155; transform: rotate(-1.5deg); margin-bottom: 8px;
@@ -159,7 +166,6 @@ body {
   border: 2px solid transparent; cursor: default; font-family: inherit;
 }
 .mapa-seg--libre { background: #dcfce7; border-color: #16a34a; color: #166534; cursor: pointer; }
-.mapa-seg--parcial { background: #ffedd5; border-color: #f97316; color: #9a3412; cursor: pointer; }
 .mapa-seg--propia {
   background: #dbeafe; border-color: #2563eb; color: #1e40af; cursor: pointer;
   box-shadow: 0 0 0 2px #1e3a8a; font-size: 9px;
@@ -206,16 +212,27 @@ body {
   display: inline-block; font-variant-numeric: tabular-nums; font-weight: 700; margin-bottom: 10px;
 }
 .fila-categoria {
-  display: flex; align-items: center; gap: 8px; padding: 7px 0; border-bottom: 1px solid var(--borde);
+  display: flex; flex-direction: column; align-items: stretch; gap: 4px;
+  padding: 7px 0; border-bottom: 1px solid var(--borde);
 }
 .fila-categoria:last-child { border-bottom: 0; }
-.fila-categoria .cat-nombre { flex: 1; font-size: 13px; font-weight: 600; }
+.fila-categoria .cat-nombre { font-size: 13px; font-weight: 600; }
 .fila-categoria .cat-detalle { display: block; font-weight: 400; color: var(--muted); font-size: 11px; }
+.cat-contador { display: flex; gap: 4px; align-items: center; }
 .btn-contador {
-  width: 34px; height: 34px; border-radius: 8px; border: 1px solid var(--borde);
+  width: 34px; height: 34px; flex: 0 0 auto; border-radius: 8px; border: 1px solid var(--borde);
   background: #f1f5f9; font-size: 18px; font-weight: 800; cursor: pointer;
 }
-.cat-valor { min-width: 30px; text-align: center; font-weight: 800; font-variant-numeric: tabular-nums; }
+.btn-salto {
+  height: 34px; min-width: 40px; padding: 0 8px; flex: 0 0 auto;
+  font-size: 12px; font-family: inherit; border-radius: 8px; border: 1px solid var(--borde);
+  background: #f1f5f9; font-weight: 700; cursor: pointer;
+}
+.cat-input {
+  width: 56px; height: 34px; flex: 0 0 auto; text-align: center; font-weight: 800;
+  font-variant-numeric: tabular-nums; border: 1px solid var(--borde);
+  border-radius: 8px; font-size: 15px; font-family: inherit;
+}
 
 /* Total de cajas con valores rápidos (84 · completo / 64 / 48 / Otro) */
 .chips-total { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
@@ -241,7 +258,7 @@ body {
   background: #fff7ed; border-color: #fed7aa; color: #c2410c;
 }
 
-/* --- Despacho del conductor: selección sobre el MAPA dibujado --- */
+/* --- Despacho del operador: selección sobre el MAPA dibujado --- */
 .chips-sel { display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 8px; }
 .chip-sel {
   border: 1.5px solid #0d9488; background: #f0fdfa; color: #0f766e;
@@ -250,12 +267,18 @@ body {
 }
 .chip-sel:hover { background: #ccfbf1; }
 
-/* Segmentos del mapa del conductor */
+/* Segmentos del mapa del operador (despacho) */
 .mapa-seg--listo {
   background: #0d9488; border-color: #0f766e; color: #fff; cursor: pointer;
 }
+.mapa-seg--clasificado-desp {
+  background: #16a34a; border-color: #15803d; color: #fff; cursor: pointer;
+}
 .mapa-seg--seleccionado {
   box-shadow: 0 0 0 2.5px #f59e0b; font-size: 9px;
+}
+.mapa-seg--punto-a {
+  box-shadow: 0 0 0 2.5px #1e3a8a; outline: 2px dashed #1e3a8a; outline-offset: 1px;
 }
 .mapa-seg--inerte { background: #e2e8f0; border-color: #cbd5e1; color: #94a3b8; cursor: default; }
 .mapa-seg--libre-cond { background: #f0fdf4; border-color: #bbf7d0; color: #86efac; cursor: default; }
@@ -272,7 +295,7 @@ body {
 /* Temporizador de tiempo activo en la tarjeta de jornada */
 .timer-jornada { font-variant-numeric: tabular-nums; }
 
-/* Filas con botón a la derecha (lista del conductor y similares) */
+/* Filas con botón a la derecha (lista del operador y similares) */
 .fila-disponible {
   display: flex; justify-content: space-between; align-items: center; gap: 8px;
   padding: 7px 0; border-top: 1px solid var(--borde);
@@ -324,7 +347,7 @@ body {
 .leyenda .item { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--muted); }
 .leyenda .punto { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
 
-/* Mapa del ADMIN sobre el boceto dibujado (mismo componente que trabajador/conductor) */
+/* Mapa del ADMIN sobre el boceto dibujado (mismo componente que trabajador/operador) */
 .mapa-zona-info { margin-left: 10px; color: var(--muted); font-weight: 600; font-size: 11px; }
 .mapa-bahia-cab-sketch {
   display: flex; justify-content: space-between; align-items: center; gap: 4px;
@@ -332,6 +355,24 @@ body {
 }
 .mapa-bahia-cab-sketch:hover { background: #f1f5f9; }
 .mapa-bahia-cab-sketch--sel { box-shadow: 0 0 0 2px rgba(37, 99, 235, .35); }
+/* Zona seleccionada del mapa admin: borde + halo azul, sin tapar el contenido */
+.mapa-zona--sel {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, .22), 2px 3px 0 rgba(51, 65, 85, .18);
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+/* Celda seleccionada del mapa admin: anillo externo que deja visible el color
+ * de estado de cada celda. */
+.mapa-seg--sel {
+  position: relative;
+  box-shadow: 0 0 0 2px #fff, 0 0 0 4px #2563eb;
+  z-index: 1;
+}
+.mapa-seg--c12 { background: #e0f2fe; border-color: #0ea5e9; color: #075985; cursor: pointer; }
+.mapa-seg--c24 { background: #ede9fe; border-color: #7c3aed; color: #5b21b6; cursor: pointer; }
+/* Modificador SOLO (el color lo pone c12/c24): borde punteado = puchito. */
+.mapa-seg--puchito { border-style: dashed; border-width: 2px; }
 .mapa-seg--libre-admin { background: #f0fdf4; border-color: #bbf7d0; cursor: pointer; }
 .mapa-seg--inactiva-admin {
   background: #e5e7eb; border: 2px dashed #94a3b8; color: #94a3b8; cursor: pointer; font-size: 9px;
@@ -353,6 +394,11 @@ body {
 .fila-form { display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 10px; align-items: end; }
 .form-ancho { max-width: 860px; }
 
+/* Selector de modo de tanda (aleatorio/manual) en asignar muestreo */
+.modo-tanda { display: flex; gap: 16px; flex-wrap: wrap; padding-top: 2px; }
+.modo-tanda label { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: var(--texto); cursor: pointer; }
+.modo-tanda input { width: 16px; height: 16px; accent-color: var(--proceso); cursor: pointer; }
+
 .mensaje { border-radius: 10px; padding: 10px 14px; font-size: 13px; font-weight: 600; margin: 10px 0; }
 .mensaje-ok { background: #f0fdf4; border: 1px solid #bbf7d0; color: var(--ok-fuerte); }
 .mensaje-error { background: #fef2f2; border: 1px solid #fecaca; color: var(--rechazado); }
@@ -372,6 +418,17 @@ table.tabla th { background: #f8fafc; font-size: 12px; color: var(--muted); text
 .alinear-derecha { text-align: right; }
 
 /* --- Mapa con pan & zoom (viewport estilo lienzo / graph paper) --- */
+.mapa-layout {
+  display: grid; grid-template-columns: 1fr 320px; gap: 18px; align-items: start;
+}
+.mapa-col { min-width: 0; }
+.mapa-panel-lateral {
+  background: #fff; border: 1px solid var(--borde); border-radius: var(--radio);
+  padding: 16px; position: sticky; top: 16px; max-height: calc(100vh - 32px); overflow-y: auto;
+}
+.mapa-panel-lateral h2 { font-size: 15px; margin: 0 0 12px; }
+.mapa-panel-lateral .fila-botones { flex-wrap: wrap; }
+
 .mapa-viewport {
   position: relative;
   height: calc(100vh - 250px);
@@ -415,3 +472,104 @@ table.tabla th { background: #f8fafc; font-size: 12px; color: var(--muted); text
   border-top: 1px solid var(--borde); cursor: pointer;
 }
 .fila-alcance input { width: 16px; height: 16px; accent-color: var(--proceso); cursor: pointer; }
+
+/* Fase 1-2: DISPONIBLE (cyan), toma por conjunto y marcas de selección */
+.mapa-seg--disponible {
+  background: #e0f2fe; border-color: #0ea5e9; color: #075985; cursor: pointer;
+}
+.mapa-seg--vacia-marcable {
+  background: #f0fdf4; border-color: #86efac; color: #166534; cursor: pointer;
+}
+.mapa-seg--marcado { box-shadow: 0 0 0 2.5px #f59e0b; }
+.mapa-seg--propia { background: #dbeafe; border-color: #2563eb; color: #1e40af; cursor: pointer; }
+.btn-tomar-bahia { font-size: 10px; padding: 3px 8px; margin-bottom: 2px; }
+.barra-toma {
+  position: sticky; bottom: 0; z-index: 30;
+  display: flex; justify-content: space-between; align-items: center; gap: 10px;
+  background: #0f172a; color: #fff; border-radius: 14px;
+  padding: 12px 14px; margin-top: 12px; box-shadow: 0 -4px 16px rgba(15, 23, 42, .25);
+}
+.barra-toma-n { color: #cbd5e1; }
+.barra-toma-n strong { color: #fff; font-size: 15px; }
+
+/* --- Selección fina "Tomar por selección" (grilla de iconos grandes) --- */
+.sel-seccion {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+  margin-top: 10px;
+}
+.sel-titulo { margin: 0 0 2px; font-size: 14px; }
+.sel-instruccion { margin: 0 0 10px; }
+.btn-cancelar-rango {
+  border: 1px solid var(--borde); background: #fff; color: var(--rechazado);
+  border-radius: 6px; padding: 1px 8px; font-size: 11px; font-weight: 700;
+  cursor: pointer; margin-left: 6px; font-family: inherit;
+}
+.btn-cancelar-rango:hover { background: #fef2f2; }
+
+/* --- Carrusel de bahías ("Tomar por selección") con flechas ‹ › --- */
+.carrusel-wrap {
+  display: flex; align-items: stretch; gap: 6px;
+}
+.carrusel-flecha {
+  flex: 0 0 auto; width: 30px; border: 1px solid var(--borde); background: var(--tarjeta);
+  border-radius: 8px; font-size: 16px; cursor: pointer;
+}
+.carrusel-flecha:hover { border-color: var(--proceso); }
+
+.carrusel-bahias {
+  display: flex; flex: 1 1 auto; overflow-x: auto; scroll-snap-type: x mandatory; gap: 10px;
+  -webkit-overflow-scrolling: touch; scrollbar-width: none;
+}
+.carrusel-bahias::-webkit-scrollbar { display: none; }
+
+.bahia-tarjeta {
+  flex: 0 0 100%; scroll-snap-align: start;
+  background: var(--tarjeta); border: 1px solid var(--borde); border-radius: var(--radio);
+  padding: 12px; box-shadow: var(--sombra);
+}
+
+.carrusel-indicador {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  margin-top: 8px; font-size: 11px; color: var(--muted);
+}
+.carrusel-dots { display: inline-flex; gap: 4px; }
+.carrusel-dot { width: 7px; height: 7px; border-radius: 999px; background: #cbd5e1; }
+.carrusel-dot.activo { background: var(--proceso); }
+
+.grupo-bahia { margin-bottom: 10px; }
+.grupo-bahia-cab {
+  display: flex; justify-content: space-between; align-items: center; gap: 8px;
+  margin-bottom: 6px;
+}
+.grupo-bahia-titulo { font-size: 13px; font-weight: 800; }
+.grilla-iconos {
+  display: grid; grid-template-columns: repeat(2, 56px); gap: 6px; justify-content: center;
+}
+.grilla-icono {
+  position: relative; height: 56px; border-radius: 12px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
+  border: 2px solid transparent; cursor: pointer; font-family: inherit; font-weight: 800;
+  color: #0f172a; padding: 0;
+}
+.grilla-icono-codigo { font-size: 15px; line-height: 1; }
+.grilla-icono-sub { font-size: 9px; font-weight: 600; opacity: .85; }
+.grilla-icono--disponible { background: #e0f2fe; border-color: #0ea5e9; color: #075985; }
+.grilla-icono--vacia { background: #f0fdf4; border-color: #86efac; color: #166534; }
+.grilla-icono--vacia-sin { cursor: default; opacity: .7; }
+.grilla-icono--hueco { background: transparent; border: 0; cursor: default; }
+.grilla-icono--inerte { background: #e2e8f0; color: #94a3b8; cursor: default; }
+.grilla-icono:hover { filter: brightness(.96); }
+.grilla-icono--hueco:hover, .grilla-icono--inerte:hover { filter: none; }
+.grilla-icono--marcado { box-shadow: 0 0 0 2.5px #f59e0b; }
+.grilla-icono--punto-a { outline: 3px solid var(--proceso); outline-offset: 2px; }
+.grilla-icono--clasificado { background: #dcfce7; border-color: #16a34a; color: #166534; }
+.grilla-icono--listo { background: #ccfbf1; border-color: #0d9488; color: #115e59; }
+.bahia-tarjeta--full { flex: none; width: 100%; }
+.apartado-bahias {
+  display: flex; flex-direction: column; gap: 12px;
+}
+.grilla-icono-check {
+  position: absolute; top: 2px; left: 2px;
+  width: 16px; height: 16px; border-radius: 999px;
+  background: var(--ok); color: #fff; font-size: 11px; line-height: 16px; text-align: center;
+}
