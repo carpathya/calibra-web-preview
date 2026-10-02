@@ -548,7 +548,8 @@ function cambiarTotalPosiciones(posicionIds, cajasTotales, tipoCaja) {
   return { ok: true, cantidad: hechos };
 }
 
-/* Vacía (retira el pallet) solo de los DISPONIBLES de las posiciones dadas. */
+/* Vacía (retira el pallet) solo de los DISPONIBLES de las posiciones dadas.
+ * La posición vuelve a inactiva (✕): no existe posición activa sin pallet. */
 function vaciarPosiciones(posicionIds) {
   let hechos = 0;
   posicionIds.forEach(id => {
@@ -557,6 +558,7 @@ function vaciarPosiciones(posicionIds) {
     if (!p || p.estado !== 'DISPONIBLE') return;
     STATE.pallets = STATE.pallets.filter(x => x.id !== p.id);
     pos.palletId = null;
+    pos.activa = false; // sin pallet → ✕
     hechos++;
   });
   if (hechos === 0) return { error: 'No hay pallets DISPONIBLES seleccionados para vaciar.' };
@@ -564,7 +566,9 @@ function vaciarPosiciones(posicionIds) {
   return { ok: true, cantidad: hechos };
 }
 
-/* Activa solo las posiciones dadas que están inactivas y sin pallet. */
+/* Activa solo las posiciones dadas que están inactivas y sin pallet.
+ * Nota: en el modelo nuevo (sin activa-vacía) esta función queda reservada
+ * para abastecerPosiciones, que la llama en silencio al crear el pallet. */
 function activarPosiciones(posicionIds) {
   let hechos = 0;
   posicionIds.forEach(id => {
@@ -574,20 +578,6 @@ function activarPosiciones(posicionIds) {
     hechos++;
   });
   if (hechos === 0) return { error: 'No hay posiciones inactivas sin pallet seleccionadas para activar.' };
-  render();
-  return { ok: true, cantidad: hechos };
-}
-
-/* Desactiva solo las posiciones dadas que están activas y sin pallet. */
-function desactivarPosiciones(posicionIds) {
-  let hechos = 0;
-  posicionIds.forEach(id => {
-    const pos = getPosicion(id);
-    if (!pos || !pos.activa || pos.palletId) return;
-    pos.activa = false;
-    hechos++;
-  });
-  if (hechos === 0) return { error: 'No hay posiciones vacías activas seleccionadas para desactivar.' };
   render();
   return { ok: true, cantidad: hechos };
 }
@@ -606,77 +596,331 @@ function vaciarBahia(bahiaId) {
   });
   if (!ids.length) return { error: 'La bahía no tiene pallets DISPONIBLES para vaciar.' };
   STATE.pallets = STATE.pallets.filter(x => ids.indexOf(x.id) === -1);
-  pos.forEach(p => { if (p.palletId && ids.indexOf(p.palletId) !== -1) p.palletId = null; });
+  pos.forEach(p => {
+    if (p.palletId && ids.indexOf(p.palletId) !== -1) {
+      p.palletId = null;
+      p.activa = false; // sin pallet → ✕ (no existe activa sin pallet)
+    }
+  });
   render();
   return { ok: true, cantidad: ids.length };
 }
 
-/* Acciones en bloque sobre lo PENDIENTE de una bahía (posiciones sin pallet,
- * inactivas o activas-vacías). Nunca tocan posiciones definidas (con pallet),
- * salvo el reset total explícito «Vaciar bahía». */
-
-/* Activa las posiciones inactivas y sin pallet de una bahía. */
-function activarPendientesBahia(bahiaId) {
-  const bahia = getBahia(bahiaId);
-  if (!bahia) return { error: 'Bahía no válida.' };
-  let n = 0;
-  posicionesDeBahia(bahiaId).forEach(p => {
-    if (!p.activa && !p.palletId) { p.activa = true; n++; }
-  });
-  if (n === 0) return { error: 'La bahía no tiene posiciones inactivas pendientes por activar.' };
-  render();
-  return { ok: true, cantidad: n };
+/* Cantidad de pallets de una bahía con trabajo vivo o ya certificado
+ * (EN_PROCESO / CLASIFICADO / EN_MUESTREO / LISTO). Solo lectura: la UI la
+ * usa para confirmar antes de que «Abastecer N» los reescriba. */
+function trabajoQueSeReescribe(bahiaId) {
+  return posicionesDeBahia(bahiaId).filter(pos => {
+    const p = pos.palletId ? getPallet(pos.palletId) : null;
+    return p && ['EN_PROCESO', 'CLASIFICADO', 'EN_MUESTREO', 'LISTO'].indexOf(p.estado) !== -1;
+  }).length;
 }
 
-/* Abastece TODAS las posiciones sin pallet de una bahía de una vez: activa en
- * silencio las inactivas y crea un pallet DISPONIBLE con el mismo total para
- * cada una. No toca las posiciones que ya tienen pallet. */
-function abastecerPendientesBahia(bahiaId, cajasTotales, tipoCaja) {
+/* Control numérico «Abastecer N posiciones» (PROYECTO.md §11/§175): deja las
+ * PRIMERAS N posiciones de la bahía (orden A1,B1,A2,B2…) DISPONIBLES con el
+ * pallet completo del tipo (84/80) y las demás VACÍAS (activas). Amplía solo
+ * si falta capacidad (filas completas A/B). Reescribe lo que haya en esas
+ * primeras N posiciones: si el pallet existe se muta in-place (mismo id, para
+ * no romper referencias); si no, se crea uno nuevo. */
+/* Control numérico «Abastecer N filas» (PROYECTO.md §11/§175): deja las
+ * PRIMERAS N filas de la bahía (orden A1,B1,A2,B2…, 2 posiciones por fila)
+ * con pallets DISPONIBLES del tipo elegido (84/80) y las demás vacías (activas).
+ * N es en FILAS; se convierte a posiciones (n*2) internamente.
+ * Amplía sola si hace falta; reescribe in-place para no romper referencias. */
+function abastecerNPosiciones(bahiaId, nFilas, tipoCaja) {
   const bahia = getBahia(bahiaId);
   if (!bahia) return { error: 'Bahía no válida.' };
-  let n = parseInt(cajasTotales, 10);
-  if (isNaN(n)) n = REGLAS.CAJAS_PALLET_CAJA12;
-  if (n > REGLAS.MAX_CAJAS_PALLET) {
-    return { error: 'El total debe ser un número entre 1 y ' + REGLAS.MAX_CAJAS_PALLET + ' cajas.' };
+  nFilas = parseInt(nFilas, 10);
+  if (isNaN(nFilas) || nFilas < 0) return { error: 'El número de filas debe ser 0 o más.' };
+  tipoCaja = parseInt(tipoCaja, 10);
+  if (tipoCaja !== 12 && tipoCaja !== 24) return { error: 'Elegí el tipo de caja: 12 o 24.' };
+  const total = completoCajasDe(tipoCaja);
+  const n = nFilas * 2; // convertir filas a posiciones para el resto de la lógica
+
+  // Amplía si falta: filas completas A/B hasta alcanzar nFilas filas.
+  const filasNecesarias = nFilas;
+  while ((posicionesDeBahia(bahiaId).length / 2) < filasNecesarias) {
+    const fila = ultimaFilaBahia(bahiaId);
+    const siguiente = (fila ? fila.pares : 0) + 1;
+    ['A', 'B'].forEach(prefijo => {
+      const cod = prefijo + siguiente;
+      STATE.posiciones.push({
+        id: bahiaId + '-' + cod,
+        bahiaId: bahiaId,
+        codigo: cod,
+        activa: false,
+        palletId: null,
+      });
+    });
   }
-  const res = resolverTipoCaja(n, tipoCaja); // resuelto UNA vez para todas
-  if (res.error) return { error: res.error };
-  let hechos = 0;
-  posicionesDeBahia(bahiaId).forEach(pos => {
-    if (pos.palletId) return; // definida: no se toca
-    if (!pos.activa) pos.activa = true; // auto-activa silenciosa
-    const pallet = {
-      id: siguienteId('P', STATE.pallets),
-      posicionId: pos.id,
-      estado: 'DISPONIBLE',
-      cajasTotales: n,
-      tipoCaja: res.tipo,
-      conjuntoId: null,
-      conteo: conteoVacio(),
-      clasificadoPor: null,
-      jornadaId: null,
-      muestreo: null,
-    };
-    STATE.pallets.push(pallet);
-    pos.palletId = pallet.id;
-    hechos++;
+
+  // Ordena por fila y prefijo: A1,B1,A2,B2…
+  const posiciones = posicionesDeBahia(bahiaId).sort((a, b) => {
+    const na = parseInt(a.codigo.slice(1), 10);
+    const nb = parseInt(b.codigo.slice(1), 10);
+    if (na !== nb) return na - nb;
+    return a.codigo[0] < b.codigo[0] ? -1 : 1;
   });
-  if (hechos === 0) return { error: 'La bahía no tiene posiciones pendientes por abastecer.' };
+
+  const eliminados = [];
+  posiciones.forEach((pos, idx) => {
+    if (idx < n) {
+      // Reescribir a DISPONIBLE con el pallet completo del tipo elegido.
+      const pallet = pos.palletId ? getPallet(pos.palletId) : null;
+      if (pallet) {
+        pallet.estado = 'DISPONIBLE';
+        pallet.cajasTotales = total;
+        pallet.tipoCaja = tipoCaja;
+        pallet.conteo = conteoVacio();
+        pallet.conjuntoId = null;
+        pallet.clasificadoPor = null;
+        pallet.jornadaId = null;
+        pallet.muestreo = null;
+      } else {
+        const nuevo = {
+          id: siguienteId('P', STATE.pallets),
+          posicionId: pos.id,
+          estado: 'DISPONIBLE',
+          cajasTotales: total,
+          tipoCaja: tipoCaja,
+          conjuntoId: null,
+          conteo: conteoVacio(),
+          clasificadoPor: null,
+          jornadaId: null,
+          muestreo: null,
+        };
+        STATE.pallets.push(nuevo);
+        pos.palletId = nuevo.id;
+      }
+      pos.activa = true;
+    } else {
+      // Por encima de N: vuelve a inactiva (✕). No existe posición activa sin pallet.
+      const pallet = pos.palletId ? getPallet(pos.palletId) : null;
+      if (pallet) {
+        eliminados.push(pallet.id);
+        STATE.pallets = STATE.pallets.filter(x => x.id !== pallet.id);
+        pos.palletId = null;
+      }
+      pos.activa = false;
+    }
+  });
+
+  // Limpia referencias colgantes: quita los ids eliminados de las asignaciones.
+  if (eliminados.length) {
+    STATE.asignaciones.forEach(asg => {
+      if (asg.loteIds) asg.loteIds = asg.loteIds.filter(id => eliminados.indexOf(id) === -1);
+      if (asg.palletIds) asg.palletIds = asg.palletIds.filter(id => eliminados.indexOf(id) === -1);
+    });
+  }
+
   render();
-  return { ok: true, cantidad: hechos };
+  return { ok: true, filas: nFilas };
 }
 
 /* Desactiva las posiciones activas y vacías (sin pallet) de una bahía. */
-function desactivarVaciasBahia(bahiaId) {
+/* ------------------------- Capacidad dinámica de bahía ------------------------- */
+
+/* Última fila de una bahía (la de mayor índice): devuelve { pares, a, b } con
+ * las posiciones A<pares> y B<pares>, o null si la bahía no tiene posiciones.
+ * pares = cantidad de posiciones / 2 (siempre se organizan en filas A|B). */
+function ultimaFilaBahia(bahiaId) {
+  const posiciones = posicionesDeBahia(bahiaId);
+  if (!posiciones.length) return null;
+  const pares = posiciones.length / 2;
+  return {
+    pares: pares,
+    a: getPosicion(bahiaId + '-A' + pares),
+    b: getPosicion(bahiaId + '-B' + pares),
+  };
+}
+
+/* Amplía la bahía con UNA fila (A<siguiente> y B<siguiente>) al final, ambas
+ * INACTIVAS y sin pallet. Sigue la numeración existente, sin tope máximo. */
+function ampliarBahia(bahiaId) {
   const bahia = getBahia(bahiaId);
   if (!bahia) return { error: 'Bahía no válida.' };
-  let n = 0;
-  posicionesDeBahia(bahiaId).forEach(p => {
-    if (p.activa && !p.palletId) { p.activa = false; n++; }
+  const fila = ultimaFilaBahia(bahiaId);
+  const siguiente = (fila ? fila.pares : 0) + 1;
+  ['A', 'B'].forEach(prefijo => {
+    const cod = prefijo + siguiente;
+    STATE.posiciones.push({
+      id: bahiaId + '-' + cod,
+      bahiaId: bahiaId,
+      codigo: cod,
+      activa: false,
+      palletId: null,
+    });
   });
-  if (n === 0) return { error: 'La bahía no tiene posiciones vacías activas por desactivar.' };
   render();
-  return { ok: true, cantidad: n };
+  return { ok: true, cantidad: 2, fila: siguiente };
+}
+
+/* Quita la ÚLTIMA fila de una bahía (A+B). Antes de mutar bloquea si alguna de
+ * las dos celdas tiene pallet en EN_PROCESO/CLASIFICADO/EN_MUESTREO/LISTO
+ * (trabajo vivo o ya certificado, no se pierde). Si pasa: descarta los pallets
+ * DISPONIBLE de la fila y quita las dos posiciones. */
+function quitarFilaBahia(bahiaId) {
+  const bahia = getBahia(bahiaId);
+  if (!bahia) return { error: 'Bahía no válida.' };
+  const fila = ultimaFilaBahia(bahiaId);
+  if (!fila) return { error: 'La bahía no tiene posiciones para quitar.' };
+  const celdas = [fila.a, fila.b].filter(Boolean);
+  // Validación ANTES de mutar: nada de trabajo vivo ni certificado se pierde.
+  const bloqueadas = [];
+  celdas.forEach(pos => {
+    const p = pos.palletId ? getPallet(pos.palletId) : null;
+    if (p && ['EN_PROCESO', 'CLASIFICADO', 'EN_MUESTREO', 'LISTO'].indexOf(p.estado) !== -1) {
+      bloqueadas.push(pos.codigo + ' (' + ESTADO_PALLET[p.estado].label + ')');
+    }
+  });
+  if (bloqueadas.length) {
+    const codA = fila.a ? fila.a.codigo : 'A' + fila.pares;
+    const codB = fila.b ? fila.b.codigo : 'B' + fila.pares;
+    return { error: 'No se puede quitar la fila ' + codA + '/' + codB + ' de ' + bahia.codigo +
+      ': ' + bloqueadas.join(' y ') + '. Liberá o despachá esos pallets primero.' };
+  }
+  // Descarta los pallets DISPONIBLES de la fila (igual que «vaciar»).
+  celdas.forEach(pos => {
+    const p = pos.palletId ? getPallet(pos.palletId) : null;
+    if (p && p.estado === 'DISPONIBLE') {
+      STATE.pallets = STATE.pallets.filter(x => x.id !== p.id);
+    }
+  });
+  // Quita las dos posiciones de la fila.
+  STATE.posiciones = STATE.posiciones.filter(p => p.id !== fila.a.id && p.id !== fila.b.id);
+  render();
+  return { ok: true, cantidad: 2 };
+}
+
+/* Configura la capacidad física (cantidad total de filas A|B) de una bahía.
+ * Si aumenta: agrega filas inactivas (✕) al final.
+ * Si disminuye: verifica que ninguna celda a recortar tenga trabajo en curso
+ * o certificado (EN_PROCESO, CLASIFICADO, EN_MUESTREO, LISTO); si tienen
+ * DISPONIBLE, los descarta; elimina las posiciones recortadas de STATE.posiciones. */
+function setCapacidadFisicaBahia(bahiaId, nuevasFilas) {
+  const bahia = getBahia(bahiaId);
+  if (!bahia) return { error: 'Bahía no válida.' };
+  nuevasFilas = parseInt(nuevasFilas, 10);
+  if (isNaN(nuevasFilas) || nuevasFilas < 1) {
+    return { error: 'La bahía debe tener al menos 1 fila física.' };
+  }
+  const posiciones = posicionesDeBahia(bahiaId);
+  const filasActuales = posiciones.length / 2;
+  if (nuevasFilas === filasActuales) {
+    return { ok: true, filas: nuevasFilas, mensaje: 'La capacidad ya es de ' + nuevasFilas + ' filas.' };
+  }
+
+  if (nuevasFilas > filasActuales) {
+    // Ampliar: agregar filas inactivas (✕) desde filasActuales + 1 hasta nuevasFilas
+    for (let f = filasActuales + 1; f <= nuevasFilas; f++) {
+      ['A', 'B'].forEach(prefijo => {
+        const cod = prefijo + f;
+        STATE.posiciones.push({
+          id: bahiaId + '-' + cod,
+          bahiaId: bahiaId,
+          codigo: cod,
+          activa: false,
+          palletId: null,
+        });
+      });
+    }
+    render();
+    return { ok: true, filas: nuevasFilas, agregadas: nuevasFilas - filasActuales };
+  }
+
+  // Reducir: validar filas a recortar (desde nuevasFilas + 1 hasta filasActuales)
+  const celdasARecortar = [];
+  for (let f = nuevasFilas + 1; f <= filasActuales; f++) {
+    const posA = getPosicion(bahiaId + '-A' + f);
+    const posB = getPosicion(bahiaId + '-B' + f);
+    if (posA) celdasARecortar.push(posA);
+    if (posB) celdasARecortar.push(posB);
+  }
+
+  const bloqueadas = [];
+  celdasARecortar.forEach(pos => {
+    const p = pos.palletId ? getPallet(pos.palletId) : null;
+    if (p && ['EN_PROCESO', 'CLASIFICADO', 'EN_MUESTREO', 'LISTO'].indexOf(p.estado) !== -1) {
+      bloqueadas.push(pos.codigo + ' (' + ESTADO_PALLET[p.estado].label + ')');
+    }
+  });
+
+  if (bloqueadas.length) {
+    return {
+      error: 'No se puede reducir a ' + nuevasFilas + ' filas: las filas a recortar tienen pallets con trabajo: ' +
+        bloqueadas.join(', ') + '. Liberá o despachá esos pallets primero.'
+    };
+  }
+
+  // Descartar pallets DISPONIBLES de las celdas recortadas
+  const idsEliminados = [];
+  celdasARecortar.forEach(pos => {
+    const p = pos.palletId ? getPallet(pos.palletId) : null;
+    if (p && p.estado === 'DISPONIBLE') {
+      idsEliminados.push(p.id);
+      STATE.pallets = STATE.pallets.filter(x => x.id !== p.id);
+    }
+  });
+
+  // Limpiar asignaciones
+  if (idsEliminados.length) {
+    STATE.asignaciones.forEach(asg => {
+      if (asg.loteIds) asg.loteIds = asg.loteIds.filter(id => idsEliminados.indexOf(id) === -1);
+      if (asg.palletIds) asg.palletIds = asg.palletIds.filter(id => idsEliminados.indexOf(id) === -1);
+    });
+  }
+
+  // Quitar posiciones recortadas
+  const recortarIds = celdasARecortar.map(p => p.id);
+  STATE.posiciones = STATE.posiciones.filter(p => recortarIds.indexOf(p.id) === -1);
+
+  render();
+  return { ok: true, filas: nuevasFilas, reducidas: filasActuales - nuevasFilas };
+}
+
+/* Crea una nueva bahía en la zona indicada, con la cantidad inicial de filas.
+ * Todas las posiciones nacen inactivas (✕). */
+function crearBahia(zonaId, codigo, filasIniciales) {
+  const z = STATE.zonas.filter(x => x.id === zonaId)[0];
+  if (!z) return { error: 'Zona no válida.' };
+  codigo = (codigo || '').trim();
+  if (!codigo) return { error: 'Ingresá un código o nombre para la bahía (ej: Bahía 4).' };
+  filasIniciales = parseInt(filasIniciales, 10);
+  if (isNaN(filasIniciales) || filasIniciales < 1) {
+    return { error: 'La bahía debe tener al menos 1 fila inicial.' };
+  }
+
+  // Generar ID único dentro de la zona
+  const bahiasZona = bahiasDeZona(zonaId);
+  let num = bahiasZona.length + 1;
+  let bahiaId = zonaId + '-B' + num;
+  while (getBahia(bahiaId)) {
+    num++;
+    bahiaId = zonaId + '-B' + num;
+  }
+
+  const nuevaBahia = {
+    id: bahiaId,
+    zonaId: zonaId,
+    codigo: codigo,
+  };
+  STATE.bahias.push(nuevaBahia);
+
+  for (let f = 1; f <= filasIniciales; f++) {
+    ['A', 'B'].forEach(prefijo => {
+      const cod = prefijo + f;
+      STATE.posiciones.push({
+        id: bahiaId + '-' + cod,
+        bahiaId: bahiaId,
+        codigo: cod,
+        activa: false,
+        palletId: null,
+      });
+    });
+  }
+
+  render();
+  return { ok: true, bahia: nuevaBahia };
 }
 
 /* Guardar el conteo parcial del conjunto en curso (los hallazgos de defectos

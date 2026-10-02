@@ -309,7 +309,8 @@ function mapaAlmacenSketch(renderSeg, opts) {
         h += renderSeg(porCodigo['A' + i]);
         h += renderSeg(porCodigo['B' + i]);
       }
-      h += '</div><span class="mapa-bahia-nombre">b' + b.codigo.replace('Bahía ', '') + '</span></div>';
+      const onClickFooter = opts.bahiaCab ? ' style="cursor:pointer" onclick="event.stopPropagation(); seleccionarBahiaMapa(\'' + b.id + '\')"' : '';
+      h += '</div><span class="mapa-bahia-nombre"' + onClickFooter + '>b' + b.codigo.replace('Bahía ', '') + '</span></div>';
     });
     h += '</div></div>';
   });
@@ -1560,34 +1561,100 @@ function oCargues() {
 
 function cambiarTab(tab) {
   UI.tab = tab;
+  UI.sidebarAdminMovil = false;
   render();
+}
+
+function toggleSidebarAdminMovil() {
+  UI.sidebarAdminMovil = !UI.sidebarAdminMovil;
+  render();
+}
+
+function seleccionarTabAdminMovil(tabId) {
+  UI.sidebarAdminMovil = false;
+  cambiarTab(tabId);
 }
 
 function renderAdmin() {
   const nAlertas = alertasPendientes().length;
-  const tabs = [
-    ['bi', 'BI en vivo'],
-    ['mapa', 'Mapa interactivo'],
-    ['despacho', 'Despacho'],
-    ['muestreo', 'Asignar muestreo'],
-    ['decisiones', 'Decisiones de muestreo' + (nAlertas ? ' (' + nAlertas + ')' : '')],
-    ['trabajadores', 'Personal'],
+  const grupos = [
+    {
+      titulo: 'Operación',
+      items: [
+        { id: 'mapa', label: 'Mapa interactivo', icono: '🗺️' },
+        { id: 'despacho', label: 'Despacho', icono: '🚚' },
+      ],
+    },
+    {
+      titulo: 'Control de calidad',
+      items: [
+        { id: 'muestreo', label: 'Asignar muestreo', icono: '📋' },
+        { id: 'decisiones', label: 'Decisiones', icono: '⚖️', badge: nAlertas || null },
+      ],
+    },
+    {
+      titulo: 'Análisis y BI',
+      items: [
+        { id: 'bi', label: 'BI en vivo', icono: '📊' },
+      ],
+    },
+    {
+      titulo: 'Configuración',
+      items: [
+        { id: 'almacen', label: 'Bahías y almacén', icono: '🏢' },
+        { id: 'trabajadores', label: 'Personal', icono: '👥' },
+      ],
+    },
   ];
-  let nav = '';
-  tabs.forEach(pair => {
-    nav += '<button class="' + (UI.tab === pair[0] ? 'activa' : '') + '" onclick="cambiarTab(\'' + pair[0] + '\')">' + pair[1] + '</button>';
+
+  let itemActivo = null;
+  for (let gi = 0; gi < grupos.length; gi++) {
+    for (let ii = 0; ii < grupos[gi].items.length; ii++) {
+      if (grupos[gi].items[ii].id === UI.tab) {
+        itemActivo = grupos[gi].items[ii];
+        break;
+      }
+    }
+    if (itemActivo) break;
+  }
+  const labelActivo = itemActivo ? (itemActivo.icono + ' ' + itemActivo.label) : 'Menú';
+
+  let nav = '<div class="admin-movil-bar">' +
+    '<button type="button" class="admin-movil-toggle" onclick="toggleSidebarAdminMovil()">' +
+    '<span>☰ <strong>' + esc(labelActivo) + '</strong></span>' +
+    '<span class="mini muted">' + (UI.sidebarAdminMovil ? '▲ Cerrar menú' : '▼ Cambiar sección') + '</span>' +
+    '</button></div>';
+
+  nav += '<div class="sidebar-admin' + (UI.sidebarAdminMovil ? ' sidebar-admin--abierto' : '') + '">';
+  grupos.forEach(g => {
+    nav += '<div class="sidebar-grupo">';
+    nav += '<div class="sidebar-grupo-titulo">' + esc(g.titulo) + '</div>';
+    g.items.forEach(it => {
+      const activa = (UI.tab === it.id) ? ' activa' : '';
+      nav += '<button type="button" class="sidebar-item' + activa + '" onclick="seleccionarTabAdminMovil(\'' + it.id + '\')">' +
+        '<span class="sidebar-item-icono">' + it.icono + '</span>' +
+        '<span class="sidebar-item-texto">' + esc(it.label) + '</span>';
+      if (it.badge) {
+        nav += '<span class="sidebar-badge">' + it.badge + '</span>';
+      }
+      nav += '<span class="sidebar-item-flecha">›</span>' +
+        '</button>';
+    });
+    nav += '</div>';
   });
+  nav += '</div>';
   document.getElementById('pestanas-admin').innerHTML = nav;
 
   const cont = document.getElementById('contenido-admin');
   switch (UI.tab) {
     case 'bi': cont.innerHTML = aBI(); break;
     case 'mapa': cont.innerHTML = aMapa(); break;
+    case 'almacen': cont.innerHTML = aAlmacen(); break;
     case 'despacho': cont.innerHTML = aDespacho(); break;
     case 'muestreo': cont.innerHTML = aAsignarMuestreo(); break;
     case 'decisiones': cont.innerHTML = aDecisiones(); break;
     case 'trabajadores': cont.innerHTML = aTrabajadores(); break;
-    default: cont.innerHTML = aBI();
+    default: cont.innerHTML = aMapa();
   }
   // El pan/zoom del mapa se (re)inicializa tras cada render de ese tab y se
   // destruye al salir de él (el zoom se resetea al cambiar de tab: aceptable).
@@ -1745,12 +1812,6 @@ function panelLateralAdmin() {
       h += '<button class="btn" onclick="cambiarTotalCeldasUI()">Cambiar total (' + disponibles + ')</button>' +
         '<button class="btn btn-peligro" onclick="vaciarCeldasUI()">Vaciar (' + disponibles + ')</button>';
     }
-    if (inactivas > 0) {
-      h += '<button class="btn" onclick="activarCeldasUI()">Activar (' + inactivas + ')</button>';
-    }
-    if (vaciasActivas > 0) {
-      h += '<button class="btn" onclick="desactivarCeldasUI()">Desactivar (' + vaciasActivas + ')</button>';
-    }
     h += '</div>' +
       '<button class="btn" style="margin-top:10px" onclick="limpiarSeleccionMapa()">Limpiar selección</button>' +
       '</div>';
@@ -1762,39 +1823,29 @@ function panelLateralAdmin() {
       const av = avanceBahia(b);
       const est = estadoBahia(b);
       const posiciones = posicionesDeBahia(b.id);
-      const nPendientes = posiciones.filter(p => !p.palletId).length;
-      const nInactivas = posiciones.filter(p => !p.palletId && !p.activa).length;
-      const nVaciasActivas = posiciones.filter(p => !p.palletId && p.activa).length;
+      const nFilasTotal = posiciones.length / 2;
+      const nFilasAbastecidas = Math.ceil(posiciones.filter(p => p.palletId).length / 2);
       const nDisponibles = posiciones.filter(p => p.palletId && getPallet(p.palletId) && getPallet(p.palletId).estado === 'DISPONIBLE').length;
       h += '<div class="campo"><label>Bahía seleccionada</label>' +
-        '<p class="mini" style="margin:0 0 6px">' + etiquetaBahia(b) + ' · ' + nPendientes + ' pendientes</p>' +
-        '<div class="panel-bahia" style="margin:0 0 10px"><h3 style="margin:0 0 6px">' + chipEstadoBahia(est) + '</h3>' +
-        '<p class="mini">Avance: ' + av.x + '/' + av.n + ' clasificadas</p>' +
+        '<div class="panel-bahia" style="margin:4px 0 10px"><h3 style="margin:0 0 4px">' + etiquetaBahia(b) + ' ' + chipEstadoBahia(est) + '</h3>' +
+        '<p class="mini">Avance: ' + av.x + '/' + av.n + ' clasificadas · ' + nFilasTotal + ' filas físicas</p>' +
         barra(av.n ? av.x / av.n * 100 : 0, est === 'COMPLETADA' ? 'var(--ok)' : 'var(--proceso)') +
         '</div>';
-      h += '<div class="fila-botones" style="flex-direction:column">';
-      if (nPendientes > 0) {
-        h += '<div class="campo" style="margin-bottom:8px"><label>Tipo de caja</label>' +
-          '<div class="chips-total">' +
-          '<button class="chip-total activo" id="chip-bahia-12" onclick="setTipoBahia(12)">Caja 12</button>' +
-          '<button class="chip-total" id="chip-bahia-24" onclick="setTipoBahia(24)">Caja 24</button>' +
-          '</div></div>' +
-          '<button class="btn btn-primario" onclick="abastecerBahiaUI(\'' + b.id + '\')">Abastecer bahía</button>';
-      }
-      if (nInactivas > 0) {
-        h += '<button class="btn" onclick="activarPendientesBahiaUI(\'' + b.id + '\')">Activar pendientes (' + nInactivas + ')</button>';
-      }
-      if (nVaciasActivas > 0) {
-        h += '<button class="btn" onclick="desactivarVaciasBahiaUI(\'' + b.id + '\')">Desactivar vacías (' + nVaciasActivas + ')</button>';
-      }
+      h += '<div class="campo" style="margin-bottom:8px"><label>Abastecer por filas</label>' +
+        '<div class="chips-total">' +
+        '<button class="chip-total activo" id="chip-bahia-12" onclick="setTipoBahia(12)">Caja 12</button>' +
+        '<button class="chip-total" id="chip-bahia-24" onclick="setTipoBahia(24)">Caja 24</button>' +
+        '</div>' +
+        '<div class="fila-form" style="grid-template-columns:1fr auto;gap:8px;margin:8px 0 0">' +
+        '<input type="number" id="form-bahia-n" min="0" value="' + nFilasAbastecidas + '" placeholder="Filas">' +
+        '<button class="btn btn-primario" onclick="abastecerNPosicionesUI(\'' + b.id + '\')">Aplicar</button>' +
+        '</div>' +
+        '<p class="mini muted" style="margin:6px 0 0">Pone N filas abastecidas y el resto en ✕. Amplía si N supera ' + nFilasTotal + '.</p>' +
+        '</div>';
       if (nDisponibles > 0) {
-        h += '<button class="btn btn-peligro" onclick="vaciarBahiaUI(\'' + b.id + '\')">Vaciar bahía (deshacer)</button>';
+        h += '<button class="btn btn-peligro" style="width:100%;margin-bottom:6px" onclick="vaciarBahiaUI(\'' + b.id + '\')">Vaciar bahía (' + nDisponibles + ' disponibles)</button>';
       }
-      if (nPendientes === 0 && nInactivas === 0 && nVaciasActivas === 0 && nDisponibles === 0) {
-        h += '<p class="mini muted">No hay acciones pendientes para esta bahía.</p>';
-      }
-      h += '</div>' +
-        '<button class="btn" style="margin-top:10px" onclick="limpiarSeleccionMapa()">Limpiar selección</button>' +
+      h += '<button class="btn" style="width:100%;margin-top:6px" onclick="limpiarSeleccionMapa()">Limpiar selección</button>' +
         '</div>';
     } else {
       h += '<p class="mini muted">Bahía no encontrada.</p>';
@@ -1905,11 +1956,23 @@ function seleccionarCeldaMapa(id) {
   else UI.mapaSelCeldas[id] = true;
   UI.mapaSel = null;
   render();
+  if (typeof window !== 'undefined' && window.innerWidth <= 900) {
+    setTimeout(function () {
+      const p = document.querySelector('.mapa-panel-lateral');
+      if (p) p.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }, 60);
+  }
 }
 function seleccionarBahiaMapa(id) {
   UI.mapaSel = { tipo: 'bahia', id: id };
   UI.mapaSelCeldas = {};
   render();
+  if (typeof window !== 'undefined' && window.innerWidth <= 900) {
+    setTimeout(function () {
+      const p = document.querySelector('.mapa-panel-lateral');
+      if (p) p.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }, 60);
+  }
 }
 function seleccionarZonaMapa(id) {
   UI.mapaSel = { tipo: 'zona', id: id };
@@ -1983,10 +2046,9 @@ function activarCeldasUI() {
   render();
 }
 
-/* Desactiva las celdas seleccionadas que están activas y sin pallet. */
+/* Desactiva las celdas seleccionadas — ya no hay activas-sin-pallet en el
+ * modelo nuevo; la función se mantiene por compatibilidad con activarCeldasUI. */
 function desactivarCeldasUI() {
-  const res = desactivarPosiciones(celdasSeleccionadas());
-  if (res.error) { alert(res.error); return; }
   UI.mapaSelCeldas = {};
   render();
 }
@@ -1996,7 +2058,7 @@ function vaciarBahiaUI(bahiaId) {
   const n = posicionesDeBahia(bahiaId).filter(p => p.palletId && getPallet(p.palletId) && getPallet(p.palletId).estado === 'DISPONIBLE').length;
   if (!n) { alert('La bahía no tiene pallets DISPONIBLES para vaciar.'); return; }
   if (!confirm('Vaciar ' + (b ? etiquetaBahia(b) : bahiaId) + ': se retiran ' + n +
-    ' pallet(s) DISPONIBLE(s). Las posiciones quedan vacías. ¿Continuar?')) return;
+    ' pallet(s) DISPONIBLE(s). Las posiciones vuelven a inactivas (✕). ¿Continuar?')) return;
   const res = vaciarBahia(bahiaId);
   if (res.error) alert(res.error);
 }
@@ -2012,34 +2074,46 @@ function tipoBahiaActual() {
   const el24 = document.getElementById('chip-bahia-24');
   return (el24 && el24.classList.contains('activo')) ? 24 : 12;
 }
-/* Abastece la bahía con el pallet completo del tipo elegido (caja 12 → 84 · caja 24 → 80). */
-function abastecerBahiaUI(bahiaId) {
-  const tipo = tipoBahiaActual();
-  abastecerPendientesBahiaUI(bahiaId, completoCajasDe(tipo), tipo);
+
+/* Control «Abastecer N filas»: lee N del input (en filas), pide confirmación si
+ * va a reescribir trabajo vivo/certificado y aplica el abastecimiento. */
+function abastecerNPosicionesUI(bahiaId) {
+  const el = document.getElementById('form-bahia-n');
+  const n = parseInt(el.value, 10);
+  if (isNaN(n) || n < 0) {
+    alert('Ingresá un número de filas válido (0 o más).');
+    return;
+  }
+  const trabajo = trabajoQueSeReescribe(bahiaId);
+  if (trabajo > 0) {
+    if (!confirm('Abastecer ' + n + ' fila(s) reescribirá ' + trabajo + ' pallet(s) con trabajo en curso o certificado. ¿Seguro?')) return;
+  }
+  const res = abastecerNPosiciones(bahiaId, n, tipoBahiaActual());
+  if (res.error) alert(res.error);
+  else alert('Bahía con ' + res.filas + ' fila(s) abastecidas (caja ' + tipoBahiaActual() + ').');
 }
 
-/* Abastece TODAS las posiciones pendientes (sin pallet) de una bahía con el
- * total elegido; las inactivas se activan en silencio. Confirm corto: N + total. */
-function abastecerPendientesBahiaUI(bahiaId, cajasTotales, tipoCaja) {
+/* Desactiva las posiciones vacías activas — ya no aplica en el modelo nuevo.
+ * Se mantiene como stub por si hay referencias antiguas. */
+function desactivarVaciasBahiaUI(bahiaId) { /* no-op */ }
+
+/* Amplía la bahía con una fila inactiva (A/B) al final. Sin confirm. */
+function ampliarBahiaUI(bahiaId) {
+  const res = ampliarBahia(bahiaId);
+  if (res.error) { alert(res.error); return; }
+  alert('Fila ' + res.fila + ' agregada (A' + res.fila + ' / B' + res.fila + '), inactiva.');
+}
+
+/* Quita la última fila de la bahía (con confirmación; solo vacía o con pallets
+ * DISPONIBLES, que se descartan). Bloquea si hay trabajo vivo o certificado. */
+function quitarFilaBahiaUI(bahiaId) {
   const b = getBahia(bahiaId);
-  const n = posicionesDeBahia(bahiaId).filter(p => !p.palletId).length;
-  const total = parseInt(cajasTotales, 10);
-  const rotulo = total === 84 ? '84 (caja 12)' : (total === 80 ? '80 (caja 24)' : total + ' (puchito)');
-  if (!confirm('Abastecer las ' + n + ' posiciones pendientes de ' + (b ? etiquetaBahia(b) : bahiaId) + ' con ' + rotulo + '?\nNo se tocan las posiciones que ya tienen pallet.')) return;
-  const res = abastecerPendientesBahia(bahiaId, cajasTotales, tipoCaja);
-  if (res.error) alert(res.error);
-  else alert(res.cantidad + ' pallets abastecidos (' + rotulo + ').');
-}
-
-/* Activa las posiciones inactivas pendientes (sin pallet). Sin confirm. */
-function activarPendientesBahiaUI(bahiaId) {
-  const res = activarPendientesBahia(bahiaId);
-  if (res.error) alert(res.error);
-}
-
-/* Desactiva las posiciones vacías activas (sin pallet). Sin confirm. */
-function desactivarVaciasBahiaUI(bahiaId) {
-  const res = desactivarVaciasBahia(bahiaId);
+  const fila = ultimaFilaBahia(bahiaId);
+  if (!fila) { alert('La bahía no tiene posiciones para quitar.'); return; }
+  const codA = fila.a ? fila.a.codigo : 'A' + fila.pares;
+  const codB = fila.b ? fila.b.codigo : 'B' + fila.pares;
+  if (!confirm('¿Quitar la última fila (' + codA + ' / ' + codB + ') de ' + (b ? etiquetaBahia(b) : bahiaId) + '? Se descartan los pallets DISPONIBLES de esa fila.')) return;
+  const res = quitarFilaBahia(bahiaId);
   if (res.error) alert(res.error);
 }
 
@@ -2048,6 +2122,171 @@ function fijarMetaDelDiaUI() {
   if (!el) return;
   const res = fijarMetaDelDia(el.value);
   if (res.error) alert(res.error);
+}
+
+/* --- Tab: Almacén (Gestión física de bahías e infraestructura) --- */
+function aAlmacen() {
+  const zonaSel = UI.filtroZonaAlmacen || 'todas';
+  const textoSel = UI.filtroTextoAlmacen || '';
+
+  let h = '<div class="seccion form-ancho">' +
+    '<div class="almacen-header">' +
+    '<div><h2 class="almacen-titulo">🏢 Bahías del almacén</h2>' +
+    '<p class="mini muted" style="margin:2px 0 0">Infraestructura física y capacidad por bahía. Las posiciones nuevas nacen inactivas (✕).</p></div>' +
+    '<button class="almacen-btn-nuevo" onclick="toggleCrearBahiaUI()">＋ Nueva bahía</button>' +
+    '</div>';
+
+  if (UI.creandoBahia) {
+    h += '<div class="almacen-form-nuevo">' +
+      '<h3>Crear nueva bahía</h3>' +
+      '<div class="fila-form" style="grid-template-columns:1fr 1fr 1fr auto;gap:12px;align-items:end">' +
+      '<div class="campo" style="margin:0"><label>Zona</label>' +
+      '<select id="form-nueva-bahia-zona">' +
+      STATE.zonas.map(z => '<option value="' + z.id + '">' + esc(z.nombre) + '</option>').join('') +
+      '</select></div>' +
+      '<div class="campo" style="margin:0"><label>Código / Nombre</label>' +
+      '<input type="text" id="form-nueva-bahia-cod" placeholder="Ej: Bahía 4"></div>' +
+      '<div class="campo" style="margin:0"><label>Filas físicas</label>' +
+      '<input type="number" id="form-nueva-bahia-filas" min="1" max="50" value="12"></div>' +
+      '<div style="display:flex;gap:8px">' +
+      '<button class="btn btn-primario" onclick="guardarNuevaBahiaUI()">Crear</button>' +
+      '<button class="btn" onclick="toggleCrearBahiaUI()">Cancelar</button>' +
+      '</div></div></div>';
+  }
+
+  // Barra de filtros (Zona + Buscar)
+  h += '<div class="almacen-filtros">' +
+    '<div class="almacen-filtro-campo">' +
+    '<label>Zona</label>' +
+    '<select id="filtro-almacen-zona" onchange="cambiarFiltroZonaAlmacen(this.value)">' +
+    '<option value="todas"' + (zonaSel === 'todas' ? ' selected' : '') + '>Todas las zonas</option>' +
+    STATE.zonas.map(z => '<option value="' + z.id + '"' + (zonaSel === z.id ? ' selected' : '') + '>' + esc(z.nombre) + '</option>').join('') +
+    '</select></div>' +
+    '<div class="almacen-filtro-campo" style="flex:2">' +
+    '<label>Buscar</label>' +
+    '<input type="text" id="filtro-almacen-texto" placeholder="Buscar por código de bahía..." value="' + esc(textoSel) + '" oninput="cambiarFiltroTextoAlmacen(this.value)">' +
+    '</div></div>';
+
+  // Filtrar lista
+  let bahiasVisibles = STATE.bahias.slice();
+  if (zonaSel !== 'todas') {
+    bahiasVisibles = bahiasVisibles.filter(b => b.zonaId === zonaSel);
+  }
+  if (textoSel.trim()) {
+    const q = textoSel.trim().toLowerCase();
+    bahiasVisibles = bahiasVisibles.filter(b => {
+      const z = STATE.zonas.find(x => x.id === b.zonaId);
+      return b.codigo.toLowerCase().includes(q) ||
+        b.id.toLowerCase().includes(q) ||
+        (z && z.nombre.toLowerCase().includes(q));
+    });
+  }
+
+  h += '<div class="almacen-lista">';
+  if (!bahiasVisibles.length) {
+    h += '<div class="tarjeta"><p class="muted">No se encontraron bahías con los filtros aplicados.</p></div>';
+  }
+
+  bahiasVisibles.forEach((b, idx) => {
+    const z = STATE.zonas.find(x => x.id === b.zonaId);
+    const pos = posicionesDeBahia(b.id);
+    const nFilas = pos.length / 2;
+    const av = avanceBahia(b);
+    const est = estadoBahia(b);
+    const editando = UI.editandoCapacidadBahia === b.id;
+
+    h += '<div class="almacen-tarjeta">' +
+      '<div class="almacen-tarjeta-fila">' +
+      '<div class="almacen-indice">' + (idx + 1) + '</div>' +
+      '<div class="almacen-info">' +
+      '<div class="almacen-nombre">' +
+      esc(b.codigo) + ' ' + chipEstadoBahia(est) +
+      '</div>' +
+      '<div class="almacen-sub">' +
+      '<span>' + esc(z ? z.nombre : b.zonaId) + ' · <code>' + b.id + '</code></span>' +
+      '<span><strong>' + nFilas + '</strong> filas (' + pos.length + ' casilleros)</span>' +
+      '<span>Avance: <strong>' + av.x + '/' + av.n + '</strong> clasificadas</span>' +
+      '</div></div>' +
+      '<div class="almacen-acciones">';
+
+    if (!editando) {
+      h += '<button class="btn" onclick="editarCapacidadBahiaUI(\'' + b.id + '\')">Configurar capacidad</button>';
+    }
+
+    h += '</div></div>';
+
+    if (editando) {
+      h += '<div class="almacen-editor">' +
+        '<label class="mini" style="font-weight:700">Capacidad física de ' + esc(b.codigo) + ' (filas A|B):</label>' +
+        '<div class="fila-form" style="grid-template-columns:auto auto auto;gap:8px;align-items:center">' +
+        '<input type="number" id="input-cap-' + b.id + '" min="1" max="100" value="' + nFilas + '" style="width:90px">' +
+        '<button class="btn btn-primario" onclick="guardarCapacidadBahiaUI(\'' + b.id + '\')">Guardar</button>' +
+        '<button class="btn" onclick="editarCapacidadBahiaUI(null)">Cancelar</button>' +
+        '</div>' +
+        '<p class="mini muted" style="margin:0">Al aumentar, nacen en ✕. Al reducir, bloquea si hay pallets con trabajo en las filas a recortar.</p>' +
+        '</div>';
+    }
+
+    h += '</div>';
+  });
+
+  h += '</div></div>';
+  return h;
+}
+
+function toggleCrearBahiaUI() {
+  UI.creandoBahia = !UI.creandoBahia;
+  render();
+}
+
+function cambiarFiltroZonaAlmacen(val) {
+  UI.filtroZonaAlmacen = val;
+  render();
+}
+
+function cambiarFiltroTextoAlmacen(val) {
+  UI.filtroTextoAlmacen = val;
+  render();
+  const el = document.getElementById('filtro-almacen-texto');
+  if (el) {
+    el.focus();
+    el.selectionStart = el.selectionEnd = el.value.length;
+  }
+}
+
+function editarCapacidadBahiaUI(bahiaId) {
+  UI.editandoCapacidadBahia = bahiaId;
+  render();
+}
+
+function guardarCapacidadBahiaUI(bahiaId) {
+  const el = document.getElementById('input-cap-' + bahiaId);
+  if (!el) return;
+  const n = parseInt(el.value, 10);
+  const res = setCapacidadFisicaBahia(bahiaId, n);
+  if (res.error) {
+    alert(res.error);
+    return;
+  }
+  UI.editandoCapacidadBahia = null;
+  render();
+  if (res.agregadas) alert('Capacidad ampliada a ' + res.filas + ' filas (+' + res.agregadas + ' fila(s) inactivas).');
+  else if (res.reducidas) alert('Capacidad reducida a ' + res.filas + ' filas (-' + res.reducidas + ' fila(s)).');
+}
+
+function guardarNuevaBahiaUI() {
+  const zonaEl = document.getElementById('form-nueva-bahia-zona');
+  const codEl = document.getElementById('form-nueva-bahia-cod');
+  const filasEl = document.getElementById('form-nueva-bahia-filas');
+  if (!zonaEl || !codEl || !filasEl) return;
+  const res = crearBahia(zonaEl.value, codEl.value, filasEl.value);
+  if (res.error) {
+    alert(res.error);
+    return;
+  }
+  UI.creandoBahia = false;
+  render();
+  alert('Bahía ' + res.bahia.codigo + ' creada con ' + filasEl.value + ' filas físicas.');
 }
 
 /* --- Tab 3: Despacho (Admin) — misma función que el Operador --- */

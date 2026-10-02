@@ -302,15 +302,116 @@ body {
 }
 .btn-tomar { min-width: 84px; }
 
-/* ------------------------- Panel administrador ------------------------- */
+/* ------------------------- Panel administrador con Sidebar ------------------------- */
 
-.panel-admin { max-width: 1180px; margin: 0 auto; padding: 20px 18px 60px; }
-.pestanas { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 18px; }
-.pestanas button {
-  border: 1px solid var(--borde); background: var(--tarjeta); border-radius: 999px;
-  padding: 8px 16px; font-size: 13px; font-weight: 700; color: var(--muted); cursor: pointer;
+.panel-admin {
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 24px 20px 60px;
+  display: flex;
+  gap: 26px;
+  align-items: flex-start;
 }
-.pestanas button.activa { background: #0f172a; border-color: #0f172a; color: #fff; }
+.sidebar-admin,
+.pestanas {
+  width: 250px;
+  flex-shrink: 0;
+  background: var(--tarjeta);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  padding: 16px 10px;
+  position: sticky;
+  top: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, .03);
+}
+.sidebar-grupo {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.sidebar-grupo-titulo {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  padding: 4px 10px 4px;
+}
+.sidebar-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #334155;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+  transition: all .15s;
+  font-family: inherit;
+}
+.sidebar-item:hover {
+  background: #f1f5f9;
+  color: var(--texto);
+}
+.sidebar-item.activa {
+  background: #254a3e; /* Forest sage green de la captura */
+  color: #ffffff;
+  font-weight: 700;
+}
+.sidebar-item-icono {
+  font-size: 16px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+}
+.sidebar-item-texto {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sidebar-item-flecha {
+  font-size: 16px;
+  color: #94a3b8;
+  font-weight: 700;
+  line-height: 1;
+}
+.sidebar-item.activa .sidebar-item-flecha {
+  color: rgba(255, 255, 255, .7);
+}
+.sidebar-badge {
+  background: var(--alerta);
+  color: #fff;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 1px 7px;
+  line-height: 16px;
+}
+.contenido-admin {
+  flex: 1;
+  min-width: 0;
+}
+
+.nav-admin {
+  width: 250px;
+  flex-shrink: 0;
+  position: sticky;
+  top: 18px;
+}
+.admin-movil-bar {
+  display: none;
+}
 
 .seccion { margin-bottom: 26px; }
 .seccion > h2 { font-size: 17px; margin: 0 0 10px; }
@@ -447,6 +548,7 @@ table.tabla th { background: #f8fafc; font-size: 12px; color: var(--muted); text
     linear-gradient(90deg, rgba(148, 163, 184, .25) 1px, transparent 1px);
   background-size: 24px 24px;
   cursor: grab;
+  touch-action: none;
 }
 .mapa-viewport:active { cursor: grabbing; }
 .mapa-lienzo { width: max-content; padding: 22px; }
@@ -572,3 +674,194 @@ table.tabla th { background: #f8fafc; font-size: 12px; color: var(--muted); text
   width: 16px; height: 16px; border-radius: 999px;
   background: var(--ok); color: #fff; font-size: 11px; line-height: 16px; text-align: center;
 }
+
+/* ------------------------- Apartado Almacén (Bahías) ------------------------- */
+
+.almacen-header {
+  display: flex; justify-content: space-between; align-items: center; gap: 16px;
+  margin-bottom: 18px; flex-wrap: wrap;
+}
+.almacen-titulo {
+  font-size: 22px; font-weight: 800; color: var(--texto);
+  display: flex; align-items: center; gap: 10px; margin: 0;
+}
+.almacen-btn-nuevo {
+  background: #f0fdf4; border: 2px solid #86efac; color: #166534;
+  border-radius: 10px; padding: 9px 18px; font-size: 14px; font-weight: 700;
+  cursor: pointer; display: flex; align-items: center; gap: 6px;
+}
+.almacen-btn-nuevo:hover { background: #dcfce7; }
+.almacen-filtros {
+  display: flex; gap: 16px; margin-bottom: 20px; flex-wrap: wrap;
+  background: var(--tarjeta); padding: 14px 18px; border: 1px solid var(--borde);
+  border-radius: var(--radio);
+}
+.almacen-filtro-campo {
+  display: flex; flex-direction: column; gap: 5px; flex: 1; min-width: 200px;
+}
+.almacen-filtro-campo label {
+  font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .3px;
+}
+.almacen-filtro-campo select,
+.almacen-filtro-campo input {
+  padding: 9px 12px; border: 1px solid var(--borde); border-radius: 8px;
+  font-size: 13px; font-family: inherit; background: #fff; color: var(--texto);
+}
+.almacen-filtro-campo select:focus,
+.almacen-filtro-campo input:focus {
+  outline: none; border-color: var(--proceso);
+}
+.almacen-lista {
+  display: flex; flex-direction: column; gap: 12px;
+}
+.almacen-tarjeta {
+  background: var(--tarjeta); border: 1px solid var(--borde); border-radius: 14px;
+  padding: 16px 20px; transition: border-color .15s, box-shadow .15s;
+}
+.almacen-tarjeta:hover {
+  border-color: #cbd5e1; box-shadow: 0 4px 14px rgba(15, 23, 42, .04);
+}
+.almacen-tarjeta-fila {
+  display: flex; align-items: center; gap: 16px;
+}
+.almacen-indice {
+  width: 44px; height: 44px; border-radius: 12px;
+  background: #f0fdf4; border: 2px solid #86efac; color: #166534;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px; font-weight: 800; flex-shrink: 0;
+}
+.almacen-info {
+  flex: 1; min-width: 0;
+}
+.almacen-nombre {
+  font-size: 16px; font-weight: 700; color: var(--texto); margin: 0 0 4px;
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+}
+.almacen-sub {
+  font-size: 12px; color: var(--muted); display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+}
+.almacen-acciones {
+  display: flex; align-items: center; gap: 8px; flex-shrink: 0;
+}
+.almacen-editor {
+  margin-top: 14px; padding-top: 14px; border-top: 1px dashed var(--borde);
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+}
+.almacen-form-nuevo {
+  background: var(--tarjeta); border: 2px dashed #86efac; border-radius: 14px;
+  padding: 18px 22px; margin-bottom: 20px;
+}
+.almacen-form-nuevo h3 { margin: 0 0 12px; font-size: 16px; }
+
+/* =========================================================================
+ * Responsive móvil (< 900px y < 600px) — Al final para máxima especificidad
+ * ========================================================================= */
+
+@media (max-width: 900px) {
+  .panel-admin {
+    flex-direction: column !important;
+    padding: 12px 10px 40px !important;
+    gap: 12px !important;
+    max-width: 100% !important;
+  }
+
+  .nav-admin {
+    width: 100% !important;
+    position: static !important;
+  }
+
+  .admin-movil-bar {
+    display: block !important;
+    width: 100% !important;
+  }
+
+  .admin-movil-toggle {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    background: var(--tarjeta);
+    border: 1px solid var(--borde);
+    border-radius: var(--radio);
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--texto);
+    cursor: pointer;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, .04);
+    font-family: inherit;
+  }
+  .admin-movil-toggle:active {
+    background: #f1f5f9;
+  }
+
+  .sidebar-admin,
+  .pestanas {
+    display: none !important;
+    width: 100% !important;
+    position: static !important;
+    flex-direction: column !important;
+    gap: 12px !important;
+    margin-top: 8px !important;
+    box-shadow: 0 6px 18px rgba(15, 23, 42, .08) !important;
+  }
+  .sidebar-admin.sidebar-admin--abierto,
+  .pestanas.sidebar-admin--abierto {
+    display: flex !important;
+  }
+  .sidebar-grupo {
+    width: 100% !important;
+  }
+
+  /* MAPA 100% RESPONSIVE EN 1 COLUMNA */
+  .mapa-layout {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 14px !important;
+    width: 100% !important;
+  }
+  .mapa-col {
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+  .mapa-viewport {
+    width: 100% !important;
+    height: 50vh !important;
+    min-height: 340px !important;
+    max-height: 480px !important;
+    touch-action: none !important;
+  }
+  .mapa-panel-lateral {
+    position: static !important;
+    max-height: none !important;
+    width: 100% !important;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, .04) !important;
+  }
+
+  /* Prevenir auto-zoom en iOS Safari */
+  .mapa-panel-lateral input,
+  .mapa-panel-lateral select,
+  .almacen-filtros input,
+  .almacen-filtros select {
+    font-size: 16px !important;
+  }
+}
+
+@media (max-width: 600px) {
+  .barra-superior {
+    padding: 8px 12px;
+    gap: 8px;
+    justify-content: space-between;
+  }
+  .marca-nombre { font-size: 18px; }
+  .marca-sub { display: none; }
+  .conmutador button {
+    padding: 6px 10px;
+    font-size: 11px;
+  }
+  .btn-reiniciar {
+    padding: 6px 10px;
+    font-size: 11px;
+  }
+}
+
